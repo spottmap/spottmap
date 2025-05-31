@@ -9,8 +9,8 @@ declare global {
   interface Window {
     google: {
       maps: {
-        Map: any;
-        Marker: any;
+        Map: new (...args: any[]) => any;
+Marker: new (...args: any[]) => any;
       };
     };
   }
