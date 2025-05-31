@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { MapPin, Plus, Save, AlertCircle } from 'lucide-react';
 
@@ -9,6 +9,11 @@ const supabase = createClient(
 );
 
 export default function AdminPage() {
+  // 認証状態管理
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
+  // フォーム状態管理
   const [formData, setFormData] = useState({
     name: '',
     location: '',
@@ -22,6 +27,35 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
+
+  // 認証チェック
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setAuthLoading(false);
+      
+      if (!user) {
+        window.location.href = '/auth';
+      }
+    };
+    
+    checkAuth();
+  }, []);
+
+  // ローディング中
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg">認証確認中...</div>
+      </div>
+    );
+  }
+
+  // 未認証
+  if (!user) {
+    return null;
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -59,7 +93,7 @@ export default function AdminPage() {
         lng: lng,
         image_url: formData.image_url || null,
         instagram_user: formData.instagram_user || null,
-        tags: tagsArray.length > 0 ? tagsArray.join(',') : null, // 一旦文字列として保存
+        tags: tagsArray.length > 0 ? tagsArray.join(',') : null,
         description: formData.description || null
       };
 
@@ -103,6 +137,7 @@ export default function AdminPage() {
             スポット管理画面
           </h1>
           <p className="text-gray-600">新しいローカルスポットを登録します</p>
+          <p className="text-sm text-green-600 mt-2">ログイン済み: {user?.email}</p>
         </div>
 
         {/* メッセージ表示 */}

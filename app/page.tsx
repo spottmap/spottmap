@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Grid, Map, Heart, Share2, User } from 'lucide-react';
+import { Grid, Map, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
@@ -28,6 +28,35 @@ export default function Home() {
   const [spots, setSpots] = useState([]); // Supabaseから読み込むデータ
   const [loading, setLoading] = useState(true);
   
+  // 認証状態管理
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  
+  // 認証状態をチェック
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setAuthLoading(false);
+    };
+    checkAuth();
+
+    // 認証状態の変更を監視
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // ログアウト機能
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      setUser(null);
+    }
+  };
+
   // Supabaseからスポットデータを取得
   const fetchSpots = async () => {
     try {
@@ -91,6 +120,61 @@ export default function Home() {
   const filteredSpots = selectedUser === 'all' 
     ? spots 
     : spots.filter(spot => spot.instagramUser === selectedUser);
+
+  // ナビゲーションコンポーネント
+  const Navigation = () => (
+    <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-lg shadow-sm">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-800">
+          ローカルスポット探索
+        </h1>
+        <p className="text-gray-600">感度の高いスポットを地図で発見しよう</p>
+      </div>
+      
+      <div className="flex items-center gap-3">
+        {!authLoading && (
+          <>
+            {user ? (
+              // ログイン済みの場合
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                  <UserCircle size={20} className="text-gray-600" />
+                  <span className="text-sm text-gray-700">
+                    {user.email?.split('@')[0]}
+                  </span>
+                </div>
+                
+                <a
+                  href="/admin"
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <Plus size={18} />
+                  管理画面
+                </a>
+                
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  <LogOut size={18} />
+                  ログアウト
+                </button>
+              </div>
+            ) : (
+              // 未ログインの場合
+              <a
+                href="/auth"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <LogIn size={18} />
+                ログイン
+              </a>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   // 地図表示用のコンポーネント
   const MapView = () => {
@@ -229,29 +313,25 @@ export default function Home() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
-      {/* Supabase接続テストボタン */}
-      <button 
-        onClick={testSupabaseConnection}
-        className="mb-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Supabase接続テスト
-      </button>
-      
-      {/* データ再読み込みボタン */}
-      <button 
-        onClick={fetchSpots}
-        disabled={loading}
-        className="mb-4 ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-      >
-        {loading ? '読み込み中...' : 'データ更新'}
-      </button>
-      
-      {/* ヘッダー */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">
-          ローカルスポット探索
-        </h1>
-        <p className="text-gray-600">感度の高いスポットを地図で発見しよう</p>
+      {/* ナビゲーション */}
+      <Navigation />
+
+      {/* デバッグボタン（開発時のみ） */}
+      <div className="flex gap-2 mb-6">
+        <button 
+          onClick={testSupabaseConnection}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+        >
+          Supabase接続テスト
+        </button>
+        
+        <button 
+          onClick={fetchSpots}
+          disabled={loading}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 text-sm"
+        >
+          {loading ? '読み込み中...' : 'データ更新'}
+        </button>
       </div>
 
       {/* 表示切替ボタン */}
