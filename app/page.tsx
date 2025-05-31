@@ -7,7 +7,12 @@ import { Loader } from '@googlemaps/js-api-loader';
 // Google Maps API の型定義
 declare global {
   interface Window {
-    google: any;
+    google: {
+      maps: {
+        Map: any;
+        Marker: any;
+      };
+    };
   }
 }
 
