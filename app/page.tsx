@@ -1,6 +1,6 @@
 'use client';
 import React, { useState } from 'react';
-import { MapPin, Grid, Map, Heart, Share2, User } from 'lucide-react';
+import { Grid, Map, Heart, Share2, User } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
