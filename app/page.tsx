@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Grid, Map, Heart, Share2, User } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
@@ -10,7 +10,7 @@ declare global {
     google: {
       maps: {
         Map: new (...args: any[]) => any;
-Marker: new (...args: any[]) => any;
+        Marker: new (...args: any[]) => any;
       };
     };
   }
@@ -25,59 +25,64 @@ export default function Home() {
   const [viewMode, setViewMode] = useState('map'); // 'map' or 'grid'
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [selectedUser, setSelectedUser] = useState('all'); // フィルター用
+  const [spots, setSpots] = useState([]); // Supabaseから読み込むデータ
+  const [loading, setLoading] = useState(true);
   
-  const testSupabaseConnection = async () => {
-    const { data, error } = await supabase.from('test').select('*')
-    console.log('Supabase接続テスト:', { data, error })
-  }
+  // Supabaseからスポットデータを取得
+  const fetchSpots = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('spots')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  // サンプルデータ
-  const spots = [
-    {
-      id: 1,
-      name: "おしゃれカフェ Roastery",
-      location: "渋谷区神宮前",
-      lat: 35.6762,
-      lng: 139.7043,
-      image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop",
-      instagramUser: "@tokyocafe_lover",
-      tags: ["#カフェ", "#コーヒー", "#渋谷"],
-      description: "こだわりの自家焙煎コーヒーが楽しめる隠れ家カフェ"
-    },
-    {
-      id: 2,
-      name: "アートギャラリー MUSE",
-      location: "港区六本木",
-      lat: 35.6627,
-      lng: 139.7320,
-      image: "https://images.unsplash.com/photo-1536924940846-227afb31e2a5?w=400&h=300&fit=crop",
-      instagramUser: "@art_tokyo",
-      tags: ["#アート", "#ギャラリー", "#六本木"],
-      description: "現代アート作品を展示する小さなギャラリー"
-    },
-    {
-      id: 3,
-      name: "古本屋 文庫の森",
-      location: "新宿区神楽坂",
-      lat: 35.7022,
-      lng: 139.7394,
-      image: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=400&h=300&fit=crop",
-      instagramUser: "@book_hunter",
-      tags: ["#古本", "#本屋", "#神楽坂"],
-      description: "レアな古本と雰囲気の良い老舗古書店"
-    },
-    {
-      id: 4,
-      name: "ヴィンテージショップ Retro",
-      location: "世田谷区下北沢",
-      lat: 35.6617,
-      lng: 139.6681,
-      image: "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=400&h=300&fit=crop",
-      instagramUser: "@vintage_shimokita",
-      tags: ["#ヴィンテージ", "#古着", "#下北沢"],
-      description: "厳選されたヴィンテージ服が見つかるお店"
+      if (error) throw error;
+
+      // データを適切な形式に変換
+      const formattedSpots = data.map(spot => ({
+        id: spot.id,
+        name: spot.name,
+        location: spot.location,
+        lat: spot.lat,
+        lng: spot.lng,
+        image: spot.image_url || "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop",
+        instagramUser: spot.instagram_user || "@unknown",
+        tags: spot.tags ? spot.tags.split(',').map(tag => tag.trim()) : [],
+        description: spot.description || ""
+      }));
+
+      setSpots(formattedSpots);
+    } catch (error) {
+      console.error('スポットデータの取得に失敗:', error);
+      // エラー時はサンプルデータを表示
+      setSpots([
+        {
+          id: 1,
+          name: "おしゃれカフェ Roastery",
+          location: "渋谷区神宮前",
+          lat: 35.6762,
+          lng: 139.7043,
+          image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop",
+          instagramUser: "@tokyocafe_lover",
+          tags: ["#カフェ", "#コーヒー", "#渋谷"],
+          description: "こだわりの自家焙煎コーヒーが楽しめる隠れ家カフェ"
+        }
+      ]);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  // コンポーネント読み込み時にデータを取得
+  useEffect(() => {
+    fetchSpots();
+  }, []);
+
+  const testSupabaseConnection = async () => {
+    const { data, error } = await supabase.from('spots').select('*');
+    console.log('Supabase接続テスト:', { data, error });
+  }
 
   // ユーザー一覧を取得
   const users = [...new Set(spots.map(spot => spot.instagramUser))];
@@ -92,6 +97,8 @@ export default function Home() {
     const mapRef = React.useRef(null);
 
     React.useEffect(() => {
+      if (loading || spots.length === 0) return;
+
       const loader = new Loader({
         apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
         version: "weekly",
@@ -118,7 +125,15 @@ export default function Home() {
           });
         }
       });
-    }, [filteredSpots]);
+    }, [filteredSpots, loading]);
+
+    if (loading) {
+      return (
+        <div className="w-full h-96 bg-gray-100 rounded-lg flex items-center justify-center">
+          <p className="text-gray-500">地図を読み込み中...</p>
+        </div>
+      );
+    }
 
     return (
       <div className="relative">
@@ -152,47 +167,65 @@ export default function Home() {
   };
 
   // グリッド表示用のコンポーネント
-  const GridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {filteredSpots.map((spot) => (
-        <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-          <img 
-            src={spot.image} 
-            alt={spot.name}
-            className="w-full h-48 object-cover"
-          />
-          <div className="p-4">
-            <div className="flex items-start justify-between mb-2">
-              <h3 className="font-bold text-lg">{spot.name}</h3>
-              <div className="flex gap-2">
-                <button className="text-gray-400 hover:text-red-500">
-                  <Heart size={20} />
-                </button>
-                <button className="text-gray-400 hover:text-blue-500">
-                  <Share2 size={20} />
-                </button>
+  const GridView = () => {
+    if (loading) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-gray-500">スポット情報を読み込み中...</p>
+        </div>
+      );
+    }
+
+    if (filteredSpots.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-gray-500">スポットが見つかりませんでした</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredSpots.map((spot) => (
+          <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+            <img 
+              src={spot.image} 
+              alt={spot.name}
+              className="w-full h-48 object-cover"
+            />
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-bold text-lg">{spot.name}</h3>
+                <div className="flex gap-2">
+                  <button className="text-gray-400 hover:text-red-500">
+                    <Heart size={20} />
+                  </button>
+                  <button className="text-gray-400 hover:text-blue-500">
+                    <Share2 size={20} />
+                  </button>
+                </div>
               </div>
-            </div>
-            <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
-            <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 text-blue-600 text-sm">
-                <User size={14} />
-                {spot.instagramUser}
-              </div>
-              <div className="flex gap-1">
-                {spot.tags.map((tag, index) => (
-                  <span key={index} className="text-xs bg-gray-100 px-2 py-1 rounded">
-                    {tag}
-                  </span>
-                ))}
+              <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
+              <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 text-blue-600 text-sm">
+                  <User size={14} />
+                  {spot.instagramUser}
+                </div>
+                <div className="flex gap-1">
+                  {spot.tags.map((tag, index) => (
+                    <span key={index} className="text-xs bg-gray-100 px-2 py-1 rounded">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
-    </div>
-  );
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
@@ -202,6 +235,15 @@ export default function Home() {
         className="mb-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
       >
         Supabase接続テスト
+      </button>
+      
+      {/* データ再読み込みボタン */}
+      <button 
+        onClick={fetchSpots}
+        disabled={loading}
+        className="mb-4 ml-2 px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+      >
+        {loading ? '読み込み中...' : 'データ更新'}
       </button>
       
       {/* ヘッダー */}
