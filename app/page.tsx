@@ -4,6 +4,13 @@ import { Grid, Map, Heart, Share2, User } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
+// Google Maps API の型定義
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -87,56 +94,56 @@ export default function Home() {
 
       loader.load().then(() => {
         if (mapRef.current) {
-          const map = new google.maps.Map(mapRef.current, {
+          const map = new window.google.maps.Map(mapRef.current, {
             center: { lat: 35.6762, lng: 139.6503 }, // 東京
             zoom: 12,
           });
 
-// スポットにピンを追加
-filteredSpots.forEach((spot) => {
-  const marker = new google.maps.Marker({
-    position: { lat: spot.lat, lng: spot.lng },
-    map: map,
-    title: spot.name,
-  });
-  
-  marker.addListener('click', () => {
-    setSelectedSpot(spot);
-  });
-});
+          // スポットにピンを追加
+          filteredSpots.forEach((spot) => {
+            const marker = new window.google.maps.Marker({
+              position: { lat: spot.lat, lng: spot.lng },
+              map: map,
+              title: spot.name,
+            });
+            
+            marker.addListener('click', () => {
+              setSelectedSpot(spot);
+            });
+          });
         }
       });
     }, [filteredSpots]);
 
     return (
-  <div className="relative">
-    <div ref={mapRef} className="w-full h-96 bg-gray-100 rounded-lg" />
-    
-    {/* 選択されたスポットの詳細 */}
-    {selectedSpot && (
-      <div className="absolute bottom-4 left-4 right-4 bg-white p-4 rounded-lg shadow-lg">
-        <div className="flex items-start gap-3">
-          <img 
-            src={selectedSpot.image} 
-            alt={selectedSpot.name}
-            className="w-16 h-16 rounded-lg object-cover"
-          />
-          <div className="flex-1">
-            <h3 className="font-bold text-lg">{selectedSpot.name}</h3>
-            <p className="text-gray-600 text-sm">{selectedSpot.location}</p>
-            <p className="text-blue-600 text-sm">{selectedSpot.instagramUser}</p>
+      <div className="relative">
+        <div ref={mapRef} className="w-full h-96 bg-gray-100 rounded-lg" />
+        
+        {/* 選択されたスポットの詳細 */}
+        {selectedSpot && (
+          <div className="absolute bottom-4 left-4 right-4 bg-white p-4 rounded-lg shadow-lg">
+            <div className="flex items-start gap-3">
+              <img 
+                src={selectedSpot.image} 
+                alt={selectedSpot.name}
+                className="w-16 h-16 rounded-lg object-cover"
+              />
+              <div className="flex-1">
+                <h3 className="font-bold text-lg">{selectedSpot.name}</h3>
+                <p className="text-gray-600 text-sm">{selectedSpot.location}</p>
+                <p className="text-blue-600 text-sm">{selectedSpot.instagramUser}</p>
+              </div>
+              <button 
+                onClick={() => setSelectedSpot(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
           </div>
-          <button 
-            onClick={() => setSelectedSpot(null)}
-            className="text-gray-400 hover:text-gray-600"
-          >
-            ✕
-          </button>
-        </div>
+        )}
       </div>
-    )}
-  </div>
-);
+    );
   };
 
   // グリッド表示用のコンポーネント
