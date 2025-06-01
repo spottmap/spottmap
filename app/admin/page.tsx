@@ -13,8 +13,11 @@ export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   
-  // フォーム状態管理
-  const [formData, setFormData] = useState({
+  // 静的生成を無効化（環境変数が必要なため）
+export const dynamic = 'force-dynamic';
+
+// フォーム状態管理
+const [formData, setFormData] = useState({
     name: '',
     location: '',
     lat: '',
