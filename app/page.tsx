@@ -14,7 +14,11 @@ import { LogOut } from 'lucide-react';
 import { Plus } from 'lucide-react';
 import { UserCircle } from 'lucide-react';
 
+// 静的生成を無効化（環境変数が必要なため）
+export const dynamic = 'force-dynamic';
+
 // Google Maps API の型定義
+
 declare global {
   interface Window {
     google: any;
