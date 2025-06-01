@@ -57,6 +57,107 @@ export default function Home() {
     }
   };
 
+  // Instagram埋め込みコンポーネント
+  const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
+    const [showEmbed, setShowEmbed] = useState(false);
+    const [embedError, setEmbedError] = useState(false);
+
+    // InstagramのURLからpostのIDを取得
+    const getInstagramPostId = (url) => {
+      if (!url) return null;
+      const match = url.match(/\/p\/([^\/\?]+)/);
+      return match ? match[1] : null;
+    };
+
+    const postId = getInstagramPostId(url);
+
+    useEffect(() => {
+      if (showEmbed && postId) {
+        // Instagram埋め込みスクリプトを動的に読み込み
+        if (!window.instgrm) {
+          const script = document.createElement('script');
+          script.src = 'https://www.instagram.com/embed.js';
+          script.async = true;
+          script.onload = () => {
+            if (window.instgrm) {
+              window.instgrm.Embeds.process();
+            }
+          };
+          document.body.appendChild(script);
+        } else {
+          window.instgrm.Embeds.process();
+        }
+      }
+    }, [showEmbed, postId]);
+
+    // URLが無効またはInstagram URLでない場合はフォールバック画像
+    if (!url || !postId) {
+      return (
+        <img 
+          src={fallbackImage} 
+          alt={spotName}
+          className="w-full h-48 object-cover"
+        />
+      );
+    }
+
+    // エラーが発生した場合もフォールバック画像
+    if (embedError) {
+      return (
+        <img 
+          src={fallbackImage} 
+          alt={spotName}
+          className="w-full h-48 object-cover"
+        />
+      );
+    }
+
+    // 最初はフォールバック画像を表示し、クリックでInstagram埋め込みを表示
+    if (!showEmbed) {
+      return (
+        <div className="relative">
+          <img 
+            src={fallbackImage} 
+            alt={spotName}
+            className="w-full h-48 object-cover cursor-pointer"
+            onClick={() => setShowEmbed(true)}
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+               onClick={() => setShowEmbed(true)}>
+            <div className="bg-white px-4 py-2 rounded-lg text-sm font-medium">
+              📸 Instagram投稿を表示
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Instagram埋め込み表示
+    return (
+      <div className="h-48 overflow-hidden">
+        <blockquote 
+          className="instagram-media" 
+          data-instgrm-captioned 
+          data-instgrm-permalink={url}
+          data-instgrm-version="14"
+          style={{
+            maxWidth: '100%',
+            minWidth: '326px',
+            width: '100%',
+            height: '100%'
+          }}
+          onError={() => setEmbedError(true)}
+        >
+          <div style={{ padding: '16px' }}>
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              Instagram投稿を見る
+            </a>
+          </div>
+        </blockquote>
+      </div>
+    );
+  };
+
   // Supabaseからスポットデータを取得
   const fetchSpots = async () => {
     try {
@@ -77,6 +178,7 @@ export default function Home() {
         lng: spot.lng,
         image: spot.image_url || "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop",
         instagramUser: spot.instagram_user || "@unknown",
+        instagramUrl: spot.instagram_url || null, // Instagram URL追加
         tags: spot.tags ? spot.tags.split(',').map(tag => tag.trim()) : [],
         description: spot.description || ""
       }));
@@ -94,6 +196,7 @@ export default function Home() {
           lng: 139.7043,
           image: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop",
           instagramUser: "@tokyocafe_lover",
+          instagramUrl: null,
           tags: ["#カフェ", "#コーヒー", "#渋谷"],
           description: "こだわりの自家焙煎コーヒーが楽しめる隠れ家カフェ"
         }
@@ -236,6 +339,16 @@ export default function Home() {
                 <h3 className="font-bold text-lg">{selectedSpot.name}</h3>
                 <p className="text-gray-600 text-sm">{selectedSpot.location}</p>
                 <p className="text-blue-600 text-sm">{selectedSpot.instagramUser}</p>
+                {selectedSpot.instagramUrl && (
+                  <a 
+                    href={selectedSpot.instagramUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-pink-500 text-xs hover:underline"
+                  >
+                    📸 Instagram投稿を見る
+                  </a>
+                )}
               </div>
               <button 
                 onClick={() => setSelectedSpot(null)}
@@ -272,11 +385,13 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredSpots.map((spot) => (
           <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-            <img 
-              src={spot.image} 
-              alt={spot.name}
-              className="w-full h-48 object-cover"
+            {/* Instagram埋め込みまたはフォールバック画像 */}
+            <InstagramEmbed 
+              url={spot.instagramUrl}
+              fallbackImage={spot.image}
+              spotName={spot.name}
             />
+            
             <div className="p-4">
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-bold text-lg">{spot.name}</h3>
@@ -291,6 +406,7 @@ export default function Home() {
               </div>
               <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
               <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
+              
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1 text-blue-600 text-sm">
                   <User size={14} />
@@ -304,6 +420,20 @@ export default function Home() {
                   ))}
                 </div>
               </div>
+              
+              {/* Instagram投稿リンク */}
+              {spot.instagramUrl && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <a 
+                    href={spot.instagramUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-pink-500 text-sm hover:underline"
+                  >
+                    📸 Instagram投稿を見る
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -410,7 +540,7 @@ export default function Home() {
 
       {/* フッター */}
       <div className="mt-8 text-center text-gray-500 text-sm">
-        <p>プロトタイプ版 - Instagram連携とGoogle Maps APIは実装予定</p>
+        <p>プロトタイプ版 - Instagram連携実装済み</p>
       </div>
     </div>
   );

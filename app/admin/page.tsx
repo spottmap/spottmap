@@ -20,6 +20,7 @@ export default function AdminPage() {
     lat: '',
     lng: '',
     image_url: '',
+    instagram_url: '', // Instagram URL専用フィールド追加
     instagram_user: '',
     tags: '',
     description: ''
@@ -91,7 +92,8 @@ export default function AdminPage() {
         location: formData.location,
         lat: lat,
         lng: lng,
-        image_url: formData.image_url || null,
+        image_url: formData.image_url || null, // 通常の画像URL
+        instagram_url: formData.instagram_url || null, // Instagram URL専用
         instagram_user: formData.instagram_user || null,
         tags: tagsArray.length > 0 ? tagsArray.join(',') : null,
         description: formData.description || null
@@ -114,6 +116,7 @@ export default function AdminPage() {
         lat: '',
         lng: '',
         image_url: '',
+        instagram_url: '', // リセットに追加
         instagram_user: '',
         tags: '',
         description: ''
@@ -223,8 +226,8 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Instagram情報 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 画像・Instagram情報 */}
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   画像URL
@@ -237,6 +240,22 @@ export default function AdminPage() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="https://example.com/image.jpg"
                 />
+                <p className="text-xs text-gray-500 mt-1">フォールバック用の通常画像URL</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  📸 Instagram投稿URL
+                </label>
+                <input
+                  type="url"
+                  name="instagram_url"
+                  value={formData.instagram_url}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  placeholder="https://www.instagram.com/p/ABC123/"
+                />
+                <p className="text-xs text-gray-500 mt-1">Instagram投稿の埋め込み表示用URL</p>
               </div>
 
               <div>
