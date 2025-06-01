@@ -135,12 +135,25 @@ export default function AdminPage() {
       <div className="max-w-2xl mx-auto p-6">
         {/* ヘッダー */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-            <MapPin className="text-blue-600" />
-            スポット管理画面
-          </h1>
-          <p className="text-gray-600">新しいローカルスポットを登録します</p>
-          <p className="text-sm text-green-600 mt-2">ログイン済み: {user?.email}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
+                <MapPin className="text-blue-600" />
+                スポット管理画面
+              </h1>
+              <p className="text-gray-600">新しいローカルスポットを登録します</p>
+              <p className="text-sm text-green-600 mt-2">ログイン済み: {user?.email}</p>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <a
+                href="/"
+                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                🏠 トップに戻る
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* メッセージ表示 */}
