@@ -1,8 +1,18 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Grid, Map, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
+
+// lucide-reactアイコンを個別インポート
+import { Grid } from 'lucide-react';
+import { Map as MapIcon } from 'lucide-react';
+import { Heart } from 'lucide-react';
+import { Share2 } from 'lucide-react';
+import { User } from 'lucide-react';
+import { LogIn } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import { Plus } from 'lucide-react';
+import { UserCircle } from 'lucide-react';
 
 // Google Maps API の型定義
 declare global {
@@ -97,6 +107,8 @@ export default function HomePage() {
   const [map, setMap] = useState(null);
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
+  const [follows, setFollows] = useState(new Set());
+  const [authors, setAuthors] = useState(new Map<string, any>());
   
   useEffect(() => {
     // 認証状態をチェック
@@ -104,8 +116,9 @@ export default function HomePage() {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       
-      // ログイン済みの場合、お気に入りデータを取得
+      // ログイン済みの場合、お気に入りとフォローデータを取得
       if (user) {
+        // お気に入りデータを取得
         const { data: favData } = await supabase
           .from('user_favorites')
           .select('spot_id')
@@ -113,6 +126,16 @@ export default function HomePage() {
         
         if (favData) {
           setFavorites(new Set(favData.map(fav => fav.spot_id)));
+        }
+
+        // フォローデータを取得
+        const { data: followData } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', user.id);
+        
+        if (followData) {
+          setFollows(new Set(followData.map(follow => follow.following_id)));
         }
       }
     };
@@ -124,12 +147,12 @@ export default function HomePage() {
     await supabase.auth.signOut();
     setUser(null);
     setFavorites(new Set());
+    setFollows(new Set());
   };
 
   // お気に入りトグル機能
-  const toggleFavorite = async (spotId: number) => {
+  const toggleFavorite = async (spotId: string) => {
     if (!user) {
-      // 未ログインの場合はログインページへ
       window.location.href = '/auth';
       return;
     }
@@ -137,7 +160,6 @@ export default function HomePage() {
     const isFavorited = favorites.has(spotId);
     
     if (isFavorited) {
-      // お気に入り解除
       const { error } = await supabase
         .from('user_favorites')
         .delete()
@@ -152,7 +174,6 @@ export default function HomePage() {
         });
       }
     } else {
-      // お気に入り追加
       const { error } = await supabase
         .from('user_favorites')
         .insert({
@@ -166,6 +187,43 @@ export default function HomePage() {
     }
   };
 
+  // フォロートグル機能
+  const toggleFollow = async (authorId: string) => {
+    if (!user) {
+      window.location.href = '/auth';
+      return;
+    }
+
+    const isFollowing = follows.has(authorId);
+    
+    if (isFollowing) {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.id)
+        .eq('following_id', authorId);
+      
+      if (!error) {
+        setFollows(prev => {
+          const newFollows = new Set(prev);
+          newFollows.delete(authorId);
+          return newFollows;
+        });
+      }
+    } else {
+      const { error } = await supabase
+        .from('follows')
+        .insert({
+          follower_id: user.id,
+          following_id: authorId
+        });
+      
+      if (!error) {
+        setFollows(prev => new Set([...prev, authorId]));
+      }
+    }
+  };
+
   useEffect(() => {
     fetchSpots();
     if (viewMode === 'map') {
@@ -174,12 +232,17 @@ export default function HomePage() {
   }, [viewMode]);
 
   const fetchSpots = async () => {
+    // spotsの基本情報を取得
     const { data, error } = await supabase
       .from('spots')
       .select('*');
     
     if (data) {
       setSpots(data);
+    }
+    
+    if (error) {
+      console.error('Error fetching spots:', error);
     }
   };
 
@@ -216,70 +279,78 @@ export default function HomePage() {
 
   const GridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-      {spots.map((spot: any) => (
-        <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-          <div className="relative">
-            {spot.instagram_url ? (
-              <InstagramEmbed url={spot.instagram_url} />
-            ) : (
-              <img 
-                src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
-                alt={spot.name}
-                className="w-full h-48 object-cover"
-              />
-            )}
-            
-            {/* お気に入りボタン */}
-            <button
-              onClick={() => toggleFavorite(spot.id)}
-              className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
-            >
-              <Heart 
-                size={20} 
-                className={favorites.has(spot.id) 
-                  ? "text-red-500 fill-red-500" 
-                  : "text-gray-400 hover:text-red-400"
-                } 
-              />
-            </button>
-          </div>
-          
-          <div className="p-4">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">{spot.name}</h3>
-            <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
-            <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
-            
-            {spot.tags && (
-              <div className="flex flex-wrap gap-1 mb-3">
-                {spot.tags.split(',').map((tag: string, index: number) => (
-                  <span key={index} className="px-2 py-1 bg-blue-100 text-blue-600 text-xs rounded-full">
-                    {tag.trim()}
-                  </span>
-                ))}
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
-              <div className="flex gap-2">
-                <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
-                  <Share2 size={16} />
+      {spots.map((spot: any) => {
+        return (
+          <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
+            <div className="relative">
+              {spot.instagram_url ? (
+                <InstagramEmbed url={spot.instagram_url} />
+              ) : (
+                <img 
+                  src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
+                  alt={spot.name}
+                  className="w-full h-48 object-cover"
+                />
+              )}
+              
+              {/* ボタンエリア */}
+              <div className="absolute top-3 right-3 flex gap-2">
+                {/* お気に入りボタン */}
+                <button
+                  onClick={() => toggleFavorite(spot.id)}
+                  className="bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  <Heart 
+                    size={18} 
+                    className={favorites.has(spot.id) 
+                      ? "text-red-500 fill-red-500" 
+                      : "text-gray-400 hover:text-red-400"
+                    } 
+                  />
                 </button>
-                {spot.instagram_url && (
-                  <a 
-                    href={spot.instagram_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                  >
-                    📸 Instagram投稿を見る
-                  </a>
-                )}
+              </div>
+            </div>
+            
+            <div className="p-4">
+              <div className="flex items-start justify-between mb-2">
+                <h3 className="font-bold text-lg">{spot.name}</h3>
+              </div>
+              
+              <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
+              <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
+              
+              {spot.tags && (
+                <div className="flex flex-wrap gap-1 mb-3">
+                  {spot.tags.split(',').map((tag: string, index: number) => (
+                    <span key={index} className="px-2 py-1 bg-pink-100 text-pink-600 text-xs rounded-full">
+                      {tag.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
+                <div className="flex gap-2">
+                  <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
+                    <Share2 size={16} />
+                  </button>
+                  {spot.instagram_url && (
+                    <a 
+                      href={spot.instagram_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                    >
+                      📸 Instagram投稿を見る
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -352,14 +423,20 @@ export default function HomePage() {
                 <div className="text-sm text-blue-100">登録スポット</div>
               </div>
               <div>
-                <div className="text-2xl font-bold">{new Set(spots.map((s: any) => s.instagram_user)).size}</div>
+                <div className="text-2xl font-bold">{authors.size}</div>
                 <div className="text-sm text-blue-100">投稿者</div>
               </div>
               {user && (
-                <div>
-                  <div className="text-2xl font-bold">{favorites.size}</div>
-                  <div className="text-sm text-blue-100">お気に入り</div>
-                </div>
+                <>
+                  <div>
+                    <div className="text-2xl font-bold">{favorites.size}</div>
+                    <div className="text-sm text-blue-100">お気に入り</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{follows.size}</div>
+                    <div className="text-sm text-blue-100">フォロー中</div>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -376,7 +453,7 @@ export default function HomePage() {
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              <Map size={18} />
+              <MapIcon size={18} />
               地図表示
             </button>
             <button
@@ -412,7 +489,7 @@ export default function HomePage() {
 
       {/* フッター */}
       <footer className="bg-gray-800 text-white p-4 text-center">
-        <p>&copy; 2024 SpottMap - Instagram連携実装済み・お気に入り機能付き</p>
+        <p>&copy; 2024 SpottMap - 基本機能完全版・お気に入り機能付き</p>
       </footer>
     </div>
   );
