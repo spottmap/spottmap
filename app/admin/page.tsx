@@ -3,21 +3,20 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { MapPin, Plus, Save, AlertCircle } from 'lucide-react';
 
+// 静的生成を無効化（環境変数が必要なため）
+export const dynamic = 'force-dynamic';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
 export default function AdminPage() {
-  // 認証状態管理
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  
-  // 静的生成を無効化（環境変数が必要なため）
-export const dynamic = 'force-dynamic';
 
-// フォーム状態管理
-const [formData, setFormData] = useState({
+  // フォーム状態管理
+  const [formData, setFormData] = useState({
     name: '',
     location: '',
     lat: '',
@@ -28,154 +27,177 @@ const [formData, setFormData] = useState({
     tags: '',
     description: ''
   });
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('');
 
-  // 認証チェック
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      setAuthLoading(false);
-      
-      if (!user) {
-        window.location.href = '/auth';
-      }
-    };
-    
     checkAuth();
   }, []);
 
-  // ローディング中
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">認証確認中...</div>
-      </div>
-    );
-  }
-
-  // 未認証
-  if (!user) {
-    return null;
-  }
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+  const checkAuth = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    } catch (error) {
+      console.error('認証チェックエラー:', error);
+    } finally {
+      setAuthLoading(false);
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage('');
 
     try {
-      // 必須フィールドのチェック
-      if (!formData.name || !formData.location || !formData.lat || !formData.lng) {
-        throw new Error('必須フィールドを入力してください');
-      }
-
-      // 緯度経度の数値変換
-      const lat = parseFloat(formData.lat);
-      const lng = parseFloat(formData.lng);
-      
-      if (isNaN(lat) || isNaN(lng)) {
-        throw new Error('緯度・経度は数値で入力してください');
-      }
-
-      // タグの配列変換（カンマ区切り）
-      const tagsArray = formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+      // Instagram URLから投稿者名を抽出する関数
+      const extractInstagramUser = (url) => {
+        if (!url) return '';
+        try {
+          const urlObj = new URL(url);
+          const pathParts = urlObj.pathname.split('/');
+          if (pathParts.length >= 2 && pathParts[1]) {
+            return pathParts[1];
+          }
+        } catch (error) {
+          console.error('Instagram URL解析エラー:', error);
+        }
+        return formData.instagram_user || '';
+      };
 
       const spotData = {
         name: formData.name,
         location: formData.location,
-        lat: lat,
-        lng: lng,
-        image_url: formData.image_url || null, // 通常の画像URL
-        instagram_url: formData.instagram_url || null, // Instagram URL専用
-        instagram_user: formData.instagram_user || null,
-        tags: tagsArray.length > 0 ? tagsArray.join(',') : null,
-        description: formData.description || null
+        lat: parseFloat(formData.lat) || null,
+        lng: parseFloat(formData.lng) || null,
+        image_url: formData.image_url,
+        instagram_url: formData.instagram_url,
+        instagram_user: extractInstagramUser(formData.instagram_url) || formData.instagram_user,
+        tags: formData.tags,
+        description: formData.description,
+        created_at: new Date().toISOString()
       };
 
       const { data, error } = await supabase
         .from('spots')
-        .insert([spotData])
-        .select();
+        .insert([spotData]);
 
       if (error) throw error;
 
-      setMessage('スポットを正常に登録しました！');
-      setMessageType('success');
-      
-      // フォームをリセット
+      setMessage('スポットが正常に登録されました！');
       setFormData({
         name: '',
         location: '',
         lat: '',
         lng: '',
         image_url: '',
-        instagram_url: '', // リセットに追加
+        instagram_url: '',
         instagram_user: '',
         tags: '',
         description: ''
       });
 
-    } catch (error: any) {
-      setMessage(error.message || 'エラーが発生しました');
-      setMessageType('error');
+    } catch (error) {
+      console.error('登録エラー:', error);
+      setMessage(`エラーが発生しました: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-lg text-gray-600">認証確認中...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+          <div className="text-center mb-8">
+            <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">管理画面</h1>
+            <p className="text-gray-600">この機能を利用するにはログインが必要です</p>
+          </div>
+          
+          <div className="space-y-4">
+            <a
+              href="/auth"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              ログイン画面へ
+            </a>
+            <a
+              href="/"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              SpottMapに戻る
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-2xl mx-auto p-6">
-        {/* ヘッダー */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
-                <MapPin className="text-blue-600" />
-                スポット管理画面
-              </h1>
-              <p className="text-gray-600">新しいローカルスポットを登録します</p>
-              <p className="text-sm text-green-600 mt-2">ログイン済み: {user?.email}</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-4">
+              <a href="/" className="text-xl font-bold text-blue-600">SpottMap</a>
+              <span className="text-gray-400">|</span>
+              <h1 className="text-lg font-semibold text-gray-900">管理画面</h1>
             </div>
             
-            <div className="flex items-center gap-3">
-              <a
-                href="/"
-                className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-600">{user.email}</span>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
-                🏠 トップに戻る
-              </a>
+                ログアウト
+              </button>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* メッセージ表示 */}
-        {message && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center gap-2 ${
-            messageType === 'success' 
-              ? 'bg-green-100 text-green-800 border border-green-200' 
-              : 'bg-red-100 text-red-800 border border-red-200'
-          }`}>
-            <AlertCircle size={20} />
-            {message}
+      {/* メインコンテンツ */}
+      <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="bg-white rounded-lg shadow-md">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
+              <Plus size={24} />
+              新しいスポットを登録
+            </h2>
+            <p className="text-gray-600 mt-2">Instagram投稿から魅力的なローカルスポットを追加しましょう</p>
           </div>
-        )}
 
-        {/* 登録フォーム */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
             {/* 基本情報 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   スポット名 *
@@ -185,33 +207,33 @@ const [formData, setFormData] = useState({
                   name="name"
                   value={formData.name}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="おしゃれカフェ Roastery"
                   required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: おしゃれカフェ Roastery"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  住所・場所 *
+                  場所・住所 *
                 </label>
                 <input
                   type="text"
                   name="location"
                   value={formData.location}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="渋谷区神宮前"
                   required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: 渋谷区神南1-2-3"
                 />
               </div>
             </div>
 
-            {/* 位置情報 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 座標 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  緯度 *
+                  緯度 (Latitude)
                 </label>
                 <input
                   type="number"
@@ -219,15 +241,14 @@ const [formData, setFormData] = useState({
                   name="lat"
                   value={formData.lat}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="35.6762"
-                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: 35.6804"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  経度 *
+                  経度 (Longitude)
                 </label>
                 <input
                   type="number"
@@ -235,58 +256,59 @@ const [formData, setFormData] = useState({
                   name="lng"
                   value={formData.lng}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="139.7043"
-                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: 139.7690"
                 />
               </div>
             </div>
 
-            {/* 画像・Instagram情報 */}
+            {/* Instagram情報 */}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  画像URL
-                </label>
-                <input
-                  type="url"
-                  name="image_url"
-                  value={formData.image_url}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="https://example.com/image.jpg"
-                />
-                <p className="text-xs text-gray-500 mt-1">フォールバック用の通常画像URL</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📸 Instagram投稿URL
+                  Instagram投稿URL
                 </label>
                 <input
                   type="url"
                   name="instagram_url"
                   value={formData.instagram_url}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-pink-500"
-                  placeholder="https://www.instagram.com/p/ABC123/"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: https://www.instagram.com/p/ABC123/"
                 />
-                <p className="text-xs text-gray-500 mt-1">Instagram投稿の埋め込み表示用URL</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Instagram投稿のURLを入力すると、投稿者名が自動で設定されます
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Instagram投稿者
+                  投稿者(@ユーザー名)
                 </label>
                 <input
                   type="text"
                   name="instagram_user"
                   value={formData.instagram_user}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="@tokyocafe_lover"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="例: tokyocafe_lover"
                 />
               </div>
+            </div>
+
+            {/* 画像URL */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                画像URL
+              </label>
+              <input
+                type="url"
+                name="image_url"
+                value={formData.image_url}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例: https://example.com/image.jpg"
+              />
             </div>
 
             {/* タグ */}
@@ -299,47 +321,61 @@ const [formData, setFormData] = useState({
                 name="tags"
                 value={formData.tags}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="#カフェ, #コーヒー, #渋谷"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="例: #カフェ, #コーヒー, #渋谷"
               />
-              <p className="text-xs text-gray-500 mt-1">カンマ区切りで入力してください</p>
+              <p className="text-sm text-gray-500 mt-1">
+                カンマ区切りで複数のタグを入力してください
+              </p>
             </div>
 
             {/* 説明 */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                説明
+                説明・コメント
               </label>
               <textarea
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="こだわりの自家焙煎コーヒーが楽しめる隠れ家カフェ"
+                rows="4"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="スポットの魅力や特徴について説明してください..."
               />
             </div>
 
             {/* 送信ボタン */}
-            <div className="flex gap-4">
+            <div className="flex items-center gap-4 pt-4">
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {loading ? (
-                  <>処理中...</>
-                ) : (
-                  <>
-                    <Save size={20} />
-                    スポットを登録
-                  </>
-                )}
+                <Save size={20} />
+                {loading ? '登録中...' : 'スポットを登録'}
               </button>
+              
+              <a
+                href="/"
+                className="px-6 py-3 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                キャンセル
+              </a>
             </div>
+
+            {/* メッセージ表示 */}
+            {message && (
+              <div className={`p-4 rounded-lg ${
+                message.includes('エラー') 
+                  ? 'bg-red-50 text-red-800 border border-red-200' 
+                  : 'bg-green-50 text-green-800 border border-green-200'
+              }`}>
+                {message}
+              </div>
+            )}
           </form>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
