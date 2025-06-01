@@ -4,6 +4,9 @@ import { ArrowLeft, Heart, Share2, UserCircle, MapPin, Users, Star, UserPlus, Us
 import { createClient } from '@supabase/supabase-js';
 import { useParams } from 'next/navigation';
 
+// 静的生成を無効化（環境変数が必要なため）
+export const dynamic = 'force-dynamic';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
