@@ -239,6 +239,26 @@ export default function HomePage() {
     
     if (data) {
       setSpots(data);
+      
+      // author_idがあるスポットのauthor情報を取得
+      const authorIds = data
+        .filter(spot => spot.author_id)
+        .map(spot => spot.author_id);
+      
+      if (authorIds.length > 0) {
+        const { data: authorsData } = await supabase
+          .from('profiles')
+          .select('id, username, display_name, instagram_username, type')
+          .in('id', authorIds);
+        
+        if (authorsData) {
+          const authorsMap = new Map();
+          authorsData.forEach(author => {
+            authorsMap.set(author.id, author);
+          });
+          setAuthors(authorsMap);
+        }
+      }
     }
     
     if (error) {
@@ -280,6 +300,7 @@ export default function HomePage() {
   const GridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
       {spots.map((spot: any) => {
+        const author = spot.author_id ? authors.get(spot.author_id) : null;
         return (
           <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
             <div className="relative">
@@ -295,6 +316,24 @@ export default function HomePage() {
               
               {/* ボタンエリア */}
               <div className="absolute top-3 right-3 flex gap-2">
+                {/* フォローボタン */}
+                {author && (
+                  <button
+                    onClick={() => toggleFollow(author.id)}
+                    className={`bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg ${
+                      follows.has(author.id) 
+                        ? 'bg-blue-500 text-white' 
+                        : ''
+                    }`}
+                  >
+                    {follows.has(author.id) ? (
+                      <User size={18} className="text-white" />
+                    ) : (
+                      <Plus size={18} className="text-gray-600 hover:text-blue-500" />
+                    )}
+                  </button>
+                )}
+                
                 {/* お気に入りボタン */}
                 <button
                   onClick={() => toggleFavorite(spot.id)}
@@ -326,6 +365,33 @@ export default function HomePage() {
                       {tag.trim()}
                     </span>
                   ))}
+                </div>
+              )}
+              
+              {/* 投稿者情報 */}
+              {author && (
+                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <UserCircle size={20} className="text-gray-500" />
+                    <div>
+                      <div className="text-sm font-medium text-gray-800">
+                        {author.display_name || author.username}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {author.instagram_username}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => toggleFollow(author.id)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                      follows.has(author.id)
+                        ? 'bg-blue-500 text-white hover:bg-blue-600'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
+                    {follows.has(author.id) ? 'フォロー中' : 'フォロー'}
+                  </button>
                 </div>
               )}
               
@@ -378,6 +444,13 @@ export default function HomePage() {
                   >
                     <Heart size={18} />
                     マイマップ
+                  </a>
+                  <a
+                    href="/follow"
+                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <User size={18} />
+                    フォロー一覧
                   </a>
                   <a
                     href="/admin"
@@ -489,7 +562,7 @@ export default function HomePage() {
 
       {/* フッター */}
       <footer className="bg-gray-800 text-white p-4 text-center">
-        <p>&copy; 2024 SpottMap - 基本機能完全版・お気に入り機能付き</p>
+        <p>&copy; 2024 SpottMap - 統一フォローシステム完成・お気に入り機能付き</p>
       </footer>
     </div>
   );
