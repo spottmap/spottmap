@@ -302,6 +302,13 @@ export default function HomePage() {
                     <span>{user.email?.split('@')[0]}</span>
                   </div>
                   <a
+                    href="/mymap"
+                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <Heart size={18} />
+                    マイマップ
+                  </a>
+                  <a
                     href="/admin"
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                   >
