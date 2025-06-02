@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Grid, Map, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check } from 'lucide-react';
+import { Grid, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check, Coffee, Palette } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -44,7 +44,7 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
       <img 
         src={fallbackImage} 
         alt={spotName}
-        className="w-full h-48 object-cover"
+        className="w-full h-32 object-cover"
       />
     );
   }
@@ -54,7 +54,7 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
       <img 
         src={fallbackImage} 
         alt={spotName}
-        className="w-full h-48 object-cover"
+        className="w-full h-32 object-cover"
       />
     );
   }
@@ -65,13 +65,13 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
         <img 
           src={fallbackImage} 
           alt={spotName}
-          className="w-full h-48 object-cover cursor-pointer"
+          className="w-full h-32 object-cover cursor-pointer"
           onClick={() => setShowEmbed(true)}
         />
-        <div className="absolute inset-0 bg-black bg-opacity-30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
              onClick={() => setShowEmbed(true)}>
-          <div className="bg-white px-4 py-2 rounded-lg text-sm font-medium">
-            📸 Instagram投稿を表示
+          <div className="bg-white px-2 py-1 rounded text-xs font-medium">
+            📸 表示
           </div>
         </div>
       </div>
@@ -79,7 +79,7 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
   }
 
   return (
-    <div className="h-48 overflow-hidden">
+    <div className="h-32 overflow-hidden">
       <blockquote 
         className="instagram-media" 
         data-instgrm-captioned 
@@ -87,13 +87,13 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
         data-instgrm-version="14"
         style={{
           maxWidth: '100%',
-          minWidth: '326px',
+          minWidth: '240px',
           width: '100%',
           height: '100%'
         }}
         onError={() => setEmbedError(true)}
       >
-        <div style={{ padding: '16px' }}>
+        <div style={{ padding: '8px' }}>
           <a href={url} target="_blank" rel="noopener noreferrer">
             Instagram投稿を見る
           </a>
@@ -102,7 +102,103 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
     </div>
   );
 };
+// 新規カテゴリ作成モーダルコンポーネント
+const CategoryCreateModal = ({ isOpen, onClose, user, onCategoryCreated }) => {
+  const [categoryName, setCategoryName] = useState('');
+  const [saving, setSaving] = useState(false);
 
+  const handleSave = async () => {
+    if (!user || !categoryName.trim()) return;
+
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from('map_categories')
+        .insert({
+          user_id: user.id,
+          name: categoryName.trim(),
+          color: '#6B7280'
+        })
+        .select()
+        .single();
+
+      if (!error) {
+        onCategoryCreated();
+        setCategoryName('');
+        onClose();
+      } else {
+        alert(`カテゴリの作成に失敗しました: ${error.message}`);
+      }
+    } catch (error) {
+      alert(`予期しないエラー: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = () => {
+    setCategoryName('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">新規カテゴリ作成</h2>
+          
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              カテゴリ名
+            </label>
+            <input
+              type="text"
+              value={categoryName}
+              onChange={(e) => setCategoryName(e.target.value)}
+              placeholder="例: ランチスポット、デートスポット"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              maxLength={20}
+            />
+            <p className="text-xs text-gray-500 mt-1">{categoryName.length}/20文字</p>
+          </div>
+
+          <div className="mb-6 p-3 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">プレビュー</h3>
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#F3F4F6' }}>
+                <Coffee size={20} style={{ color: '#6B7280' }} />
+              </div>
+              <div>
+                <div className="font-medium text-gray-900">
+                  {categoryName || 'カテゴリ名'}
+                </div>
+                <div className="text-sm text-gray-500">0件</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleClose}
+              className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !categoryName.trim()}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? '作成中...' : '作成'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 // 公開設定モーダルコンポーネント
 const PrivacySettingsModal = ({ isOpen, onClose, user, privacySetting, setPrivacySetting }) => {
   const [localPrivacy, setLocalPrivacy] = useState(privacySetting);
@@ -122,28 +218,18 @@ const PrivacySettingsModal = ({ isOpen, onClose, user, privacySetting, setPrivac
 
     setSaving(true);
     try {
-      console.log('💾 保存開始 - Setting:', localPrivacy);
-      console.log('💾 User ID:', user.id);
-      
-      // シンプルなUPDATE処理
       const { error } = await supabase
         .from('profiles')
         .update({ privacy_setting: localPrivacy })
         .eq('user_id', user.id);
 
-      console.log('💾 UPDATE結果 - Error:', error);
-
       if (!error) {
-        console.log('✅ 保存成功');
         setPrivacySetting(localPrivacy);
         onClose();
       } else {
-        console.error('❌ 保存失敗:', error);
-        // エラーがある場合でも詳細を表示
         alert(`保存に失敗しました: ${error.message}`);
       }
     } catch (error) {
-      console.error('🚨 保存例外:', error);
       alert(`予期しないエラー: ${error.message}`);
     } finally {
       setSaving(false);
@@ -163,8 +249,12 @@ const PrivacySettingsModal = ({ isOpen, onClose, user, privacySetting, setPrivac
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-96 overflow-y-auto">
+    <div 
+  className="fixed inset-0 flex items-center justify-center z-[100] p-4" 
+  style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} 
+  onClick={onClose}
+>
+  <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-96 overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">マイマップの公開設定</h2>
           
@@ -264,6 +354,12 @@ export default function MyMapPage() {
   const [loading, setLoading] = useState(true);
   const [privacySetting, setPrivacySetting] = useState('private');
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  
+  // Instagram風カテゴリ機能のstate
+  const [categories, setCategories] = useState([]);
+  const [categorySpotCounts, setCategorySpotCounts] = useState(new Map());
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -273,6 +369,7 @@ export default function MyMapPage() {
       if (user) {
         await fetchFavoriteSpots(user.id);
         await fetchPrivacySetting(user.id);
+        await fetchCategories(user.id);
       } else {
         setLoading(false);
       }
@@ -281,13 +378,39 @@ export default function MyMapPage() {
     checkAuth();
   }, []);
 
+  const fetchCategories = async (userId) => {
+    try {
+      // カテゴリ一覧取得
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('map_categories')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (categoriesError) throw categoriesError;
+
+      setCategories(categoriesData || []);
+
+      // 各カテゴリのスポット数を取得
+      const counts = new Map();
+      for (const category of categoriesData || []) {
+        const { data: spotCategoriesData } = await supabase
+          .from('spot_categories')
+          .select('spot_id')
+          .eq('category_id', category.id);
+        
+        counts.set(category.id, spotCategoriesData?.length || 0);
+      }
+      setCategorySpotCounts(counts);
+
+    } catch (error) {
+      console.error('カテゴリの取得に失敗:', error);
+    }
+  };
+
   const fetchPrivacySetting = async (userId) => {
     try {
-      console.log('🔍 fetchPrivacySetting開始 - User ID:', userId);
-      
-      // 特定のユーザーIDに対して強制的に'unlisted'を設定
       if (userId === '79eda0bf-3c12-44e5-9440-e09e4c21beba') {
-        console.log('🎯 特定ユーザーID検出 - 強制的にunlistedに設定');
         setPrivacySetting('unlisted');
         return;
       }
@@ -298,18 +421,11 @@ export default function MyMapPage() {
         .eq('user_id', userId)
         .maybeSingle();
 
-      console.log('📊 Full Profile data:', data);
-      console.log('❌ Query Error:', error);
-      console.log('🔐 Specific privacy_setting:', data?.privacy_setting);
-
       if (data && data.privacy_setting) {
-        console.log('✅ Setting privacy to:', data.privacy_setting);
         setPrivacySetting(data.privacy_setting);
-      } else {
-        console.log('❌ No privacy setting found, keeping default: private');
       }
     } catch (error) {
-      console.error('🚨 公開設定の取得に失敗:', error);
+      console.error('公開設定の取得に失敗:', error);
     }
   };
 
@@ -317,7 +433,6 @@ export default function MyMapPage() {
     try {
       setLoading(true);
       
-      // お気に入りのspot_idを取得
       const { data: favData, error: favError } = await supabase
         .from('user_favorites')
         .select('spot_id')
@@ -329,7 +444,6 @@ export default function MyMapPage() {
         const spotIds = favData.map(fav => fav.spot_id);
         setFavorites(new Set(spotIds));
 
-        // お気に入りのスポット情報を取得
         const { data: spotsData, error: spotsError } = await supabase
           .from('spots')
           .select('*')
@@ -357,7 +471,6 @@ export default function MyMapPage() {
     
     try {
       if (isFavorited) {
-        // お気に入り解除
         const { error } = await supabase
           .from('user_favorites')
           .delete()
@@ -370,11 +483,9 @@ export default function MyMapPage() {
             newFavorites.delete(spotId);
             return newFavorites;
           });
-          // お気に入りスポットリストからも削除
           setFavoriteSpots(prev => prev.filter(spot => spot.id !== spotId));
         }
       } else {
-        // お気に入り追加
         const { error } = await supabase
           .from('user_favorites')
           .insert({
@@ -384,7 +495,6 @@ export default function MyMapPage() {
         
         if (!error) {
           setFavorites(prev => new Set([...prev, spotId]));
-          // スポット情報を取得して追加
           const { data: spotData } = await supabase
             .from('spots')
             .select('*')
@@ -409,7 +519,6 @@ export default function MyMapPage() {
   };
 
   const getPrivacyIcon = () => {
-    console.log('🎨 getPrivacyIcon called with privacySetting:', privacySetting);
     switch (privacySetting) {
       case 'public': return <Globe size={16} />;
       case 'unlisted': return <LinkIcon size={16} />;
@@ -419,13 +528,23 @@ export default function MyMapPage() {
   };
 
   const getPrivacyLabel = () => {
-    console.log('🏷️ getPrivacyLabel called with privacySetting:', privacySetting);
     switch (privacySetting) {
       case 'public': return '公開';
       case 'unlisted': return '限定公開';
       case 'private': 
       default: return '非公開';
     }
+  };
+
+  // カテゴリ選択時のスポットフィルタリング
+  const getFilteredSpots = () => {
+    if (selectedCategory === 'all') {
+      return favoriteSpots;
+    }
+    
+    // 選択されたカテゴリのスポットIDを取得
+    // この部分は後で実装（カテゴリ別フィルタリング）
+    return favoriteSpots;
   };
 
   if (loading) {
@@ -441,7 +560,6 @@ export default function MyMapPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50">
-        {/* ヘッダー */}
         <header className="bg-white shadow-sm border-b">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
@@ -451,8 +569,8 @@ export default function MyMapPage() {
                   <span>SpottMapに戻る</span>
                 </a>
               </div>
-              <a
-                href="/auth"
+              
+                <a href="/auth"
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <LogIn size={18} />
@@ -462,7 +580,6 @@ export default function MyMapPage() {
           </div>
         </header>
 
-        {/* ログイン促進画面 */}
         <div className="max-w-2xl mx-auto px-4 py-16 text-center">
           <div className="mb-8">
             <Heart size={64} className="mx-auto text-gray-300 mb-4" />
@@ -483,7 +600,7 @@ export default function MyMapPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Map size={20} className="text-blue-500 mt-1" />
+                <MapIcon size={20} className="text-blue-500 mt-1" />
                 <div>
                   <h3 className="font-medium text-gray-900">専用マップ</h3>
                   <p className="text-gray-600 text-sm">保存したスポットだけを表示</p>
@@ -497,17 +614,17 @@ export default function MyMapPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Plus size={20} className="text-purple-500 mt-1" />
+                <Palette size={20} className="text-purple-500 mt-1" />
                 <div>
-                  <h3 className="font-medium text-gray-900">無制限保存</h3>
-                  <p className="text-gray-600 text-sm">好きなだけスポットを保存可能</p>
+                  <h3 className="font-medium text-gray-900">カテゴリ分類</h3>
+                  <p className="text-gray-600 text-sm">カフェ、レストランなどで整理</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <a
-            href="/auth"
+          
+            <a href="/auth"
             className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-lg font-medium"
           >
             <LogIn size={20} />
@@ -517,8 +634,6 @@ export default function MyMapPage() {
       </div>
     );
   }
-
-  console.log('🎯 Rendering header with privacySetting:', privacySetting);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -546,8 +661,8 @@ export default function MyMapPage() {
                 {getPrivacyIcon()}
                 {getPrivacyLabel()}
               </button>
-              <a
-                href="/admin"
+              
+                <a href="/admin"
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <Plus size={18} />
@@ -572,7 +687,7 @@ export default function MyMapPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold mb-2">あなたのお気に入りスポット</h2>
-              <p className="text-red-100">保存したスポットをまとめて確認できます</p>
+              <p className="text-red-100">カテゴリ別に整理して、効率的に管理できます</p>
             </div>
             <div className="text-right">
               <div className="text-3xl font-bold">{favoriteSpots.length}</div>
@@ -581,10 +696,101 @@ export default function MyMapPage() {
           </div>
         </div>
 
+        {/* Instagram風カテゴリ一覧 */}
+        <div className="p-6 bg-white border-b border-gray-200">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-bold text-gray-900">カテゴリ</h3>
+            <button 
+  onClick={() => setShowCategoryModal(true)}
+  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+>
+              <Plus size={16} />
+              新規作成
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {/* すべてのスポット */}
+            <div 
+              className={`relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
+                selectedCategory === 'all' ? 'ring-2 ring-blue-500' : ''
+              }`}
+              onClick={() => setSelectedCategory('all')}
+            >
+              <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                <div className="grid grid-cols-2 gap-1 w-full h-full p-2">
+                  {favoriteSpots.slice(0, 4).map((spot, index) => (
+                    <div key={index} className="bg-white rounded-lg overflow-hidden">
+                      <InstagramEmbed 
+                        url={spot.instagram_url}
+                        fallbackImage={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&h=200&fit=crop'}
+                        spotName={spot.name}
+                      />
+                    </div>
+                  ))}
+                  {favoriteSpots.length < 4 && (
+                    Array.from({ length: 4 - favoriteSpots.length }).map((_, index) => (
+                      <div key={`empty-${index}`} className="bg-gray-300 rounded-lg"></div>
+                    ))
+                  )}
+                </div>
+              </div>
+              <div className="p-3 bg-white">
+                <h4 className="font-medium text-gray-900">すべてのスポット</h4>
+                <p className="text-sm text-gray-500">{favoriteSpots.length}件</p>
+              </div>
+            </div>
+
+            {/* カテゴリカード */}
+            {categories.map((category) => (
+              <div 
+                key={category.id}
+                className={`relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
+                  selectedCategory === category.id ? 'ring-2 ring-blue-500' : ''
+                }`}
+                onClick={() => setSelectedCategory(category.id)}
+              >
+                <div 
+                  className="aspect-square flex items-center justify-center"
+                  style={{ backgroundColor: category.color + '20' }}
+                >
+                  <div className="grid grid-cols-2 gap-1 w-full h-full p-2">
+                    {/* カテゴリ内のスポット画像を2x2で表示 */}
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div key={index} className="bg-white rounded-lg overflow-hidden">
+                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                          <Coffee size={16} style={{ color: category.color }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-3 bg-white">
+                  <h4 className="font-medium text-gray-900">{category.name}</h4>
+                  <p className="text-sm text-gray-500">{categorySpotCounts.get(category.id) || 0}件</p>
+                </div>
+              </div>
+            ))}
+
+            {/* 新規カテゴリ作成カード */}
+            <div className="relative cursor-pointer rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
+              <div className="aspect-square bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                  <Plus size={32} className="text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500 font-medium">新規カテゴリ</p>
+                </div>
+              </div>
+              <div className="p-3 bg-white">
+                <h4 className="font-medium text-gray-900">カテゴリを追加</h4>
+                <p className="text-sm text-gray-500">分類を作成</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* スポット表示エリア */}
         <div className="p-6">
           {favoriteSpots.length === 0 ? (
-            // 空の状態
             <div className="text-center py-16">
               <Heart size={64} className="mx-auto text-gray-300 mb-6" />
               <h3 className="text-xl font-semibold text-gray-900 mb-4">
@@ -593,18 +799,17 @@ export default function MyMapPage() {
               <p className="text-gray-600 mb-8">
                 気になるスポットを見つけたら、ハートボタンを押してお気に入りに追加しましょう
               </p>
-              <a
-                href="/"
+              
+                <a href="/"
                 className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                <Map size={20} />
+                <MapIcon size={20} />
                 スポットを探しに行く
               </a>
             </div>
           ) : (
-            // お気に入りスポットのグリッド表示
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {favoriteSpots.map((spot) => (
+              {getFilteredSpots().map((spot) => (
                 <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
                   <div className="relative">
                     {spot.instagram_url ? (
@@ -616,80 +821,91 @@ export default function MyMapPage() {
                     ) : (
                       <img 
                         src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
-                        alt={spot.name}
-                        className="w-full h-48 object-cover"
-                      />
-                    )}
-                    
-                    {/* お気に入りボタン */}
-                    <button
-                      onClick={() => toggleFavorite(spot.id)}
-                      className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                    >
-                      <Heart 
-                        size={20} 
-                        className={favorites.has(spot.id) 
-                          ? "text-red-500 fill-red-500" 
-                          : "text-gray-400 hover:text-red-400"
-                        } 
-                      />
-                    </button>
-                  </div>
-                  
-                  <div className="p-4">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-2">{spot.name}</h3>
-                    <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
-                    <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
-                    
-                    {spot.tags && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {spot.tags.split(',').map((tag, index) => (
-                          <span key={index} className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full">
-                            {tag.trim()}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
-                      <div className="flex gap-2">
-                        <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
-                          <Share2 size={16} />
-                        </button>
-                        {spot.instagram_url && (
-                          <a 
-                            href={spot.instagram_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-sm text-pink-500 hover:text-pink-600 flex items-center gap-1"
-                          >
-                            📸 Instagram投稿を見る
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
+                       alt={spot.name}
+                       className="w-full h-48 object-cover"
+                     />
+                   )}
+                   
+                   <button
+                     onClick={() => toggleFavorite(spot.id)}
+                     className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
+                   >
+                     <Heart 
+                       size={20} 
+                       className={favorites.has(spot.id) 
+                         ? "text-red-500 fill-red-500" 
+                         : "text-gray-400 hover:text-red-400"
+                       } 
+                     />
+                   </button>
+                 </div>
+                 
+                 <div className="p-4">
+                   <h3 className="text-lg font-semibold text-gray-800 mb-2">{spot.name}</h3>
+                   <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
+                   <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
+                   
+                   {spot.tags && (
+                     <div className="flex flex-wrap gap-1 mb-3">
+                       {spot.tags.split(',').map((tag, index) => (
+                         <span key={index} className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full">
+                           {tag.trim()}
+                         </span>
+                       ))}
+                     </div>
+                   )}
+                   
+                   <div className="flex items-center justify-between">
+                     <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
+                     <div className="flex gap-2">
+                       <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
+                         <Share2 size={16} />
+                       </button>
+                       {spot.instagram_url && (
+                         <a 
+                           href={spot.instagram_url} 
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           className="text-sm text-pink-500 hover:text-pink-600 flex items-center gap-1"
+                         >
+                           📸 Instagram投稿を見る
+                         </a>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </div>
+         )}
+       </div>
+     </main>
 
-      {/* 公開設定モーダル */}
-      <PrivacySettingsModal
-        isOpen={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
+     {/* 公開設定モーダル */}
+     <PrivacySettingsModal
+       isOpen={showPrivacyModal}
+       onClose={() => setShowPrivacyModal(false)}
+       user={user}
+       privacySetting={privacySetting}
+       setPrivacySetting={setPrivacySetting}
+       />
+
+      {/* カテゴリ作成モーダル */}
+      <CategoryCreateModal
+        isOpen={showCategoryModal}
+        onClose={() => setShowCategoryModal(false)}
         user={user}
-        privacySetting={privacySetting}
-        setPrivacySetting={setPrivacySetting}
+        onCategoryCreated={() => {
+          if (user) {
+            fetchCategories(user.id);
+          }
+        }}
       />
 
-      {/* フッター */}
-      <footer className="bg-gray-800 text-white p-4 text-center">
-        <p>&copy; 2024 SpottMap - あなただけの特別なマップ</p>
-      </footer>
-    </div>
-  );
+     {/* フッター */}
+     <footer className="bg-gray-800 text-white p-4 text-center">
+       <p>&copy; 2024 SpottMap - あなただけの特別なマップ</p>
+     </footer>
+   </div>
+ );
 }

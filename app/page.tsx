@@ -3,21 +3,24 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
-// lucide-reactアイコンを個別インポート
-import { Grid } from 'lucide-react';
-import { Map as MapIcon } from 'lucide-react';
-import { Heart } from 'lucide-react';
-import { Share2 } from 'lucide-react';
-import { User } from 'lucide-react';
-import { LogIn } from 'lucide-react';
-import { LogOut } from 'lucide-react';
-import { Plus } from 'lucide-react';
-import { UserCircle } from 'lucide-react';
+import { 
+  Grid, 
+  MapIcon,
+  Heart, 
+  Share2,
+  User, 
+  LogIn, 
+  LogOut, 
+  Plus, 
+  UserCircle, 
+  Search, 
+  MapPin, 
+  Eye, 
+  AlertCircle,
+  Coffee
+} from 'lucide-react';
 
-// 静的生成を無効化（環境変数が必要なため）
 export const dynamic = 'force-dynamic';
-
-// Google Maps API の型定義
 
 declare global {
   interface Window {
@@ -41,7 +44,6 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
     setIsLoading(true);
     setShowEmbed(true);
     
-    // Instagram埋め込みスクリプトを動的に読み込み
     if (!document.querySelector('script[src*="instagram.com/embed.js"]')) {
       const script = document.createElement('script');
       script.src = '//www.instagram.com/embed.js';
@@ -61,17 +63,17 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
     <div className="w-full">
       {!showEmbed ? (
         <div 
-          className="relative group cursor-pointer"
+          className="relative cursor-pointer"
           onClick={handleShowEmbed}
         >
           <img 
             src="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop"
             alt="フォールバック画像"
-            className="w-full h-48 object-cover rounded-lg"
+            className="w-full h-64 object-cover rounded-xl"
           />
-          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-lg">
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-xl">
             <div className="text-white text-center">
-              <div className="text-2xl mb-2">📸</div>
+              <div className="text-3xl mb-2">📸</div>
               <div className="text-sm font-medium">Instagram投稿を表示</div>
             </div>
           </div>
@@ -79,8 +81,11 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
       ) : (
         <div className="w-full">
           {isLoading && (
-            <div className="w-full h-48 bg-gray-100 flex items-center justify-center rounded-lg">
-              <div className="text-gray-500">Instagram投稿を読み込み中...</div>
+            <div className="w-full h-64 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center rounded-xl">
+              <div className="flex items-center gap-3 text-gray-500">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-500 border-t-transparent"></div>
+                <span>Instagram投稿を読み込み中...</span>
+              </div>
             </div>
           )}
           <blockquote 
@@ -91,7 +96,7 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
             style={{ 
               background: '#FFF',
               border: '0',
-              borderRadius: '3px',
+              borderRadius: '12px',
               margin: '1px',
               maxWidth: '100%',
               minWidth: '326px',
@@ -106,23 +111,24 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
 };
 
 export default function HomePage() {
-  const [viewMode, setViewMode] = useState('map');
+  const [viewMode, setViewMode] = useState('grid');
   const [spots, setSpots] = useState([]);
+  const [filteredSpots, setFilteredSpots] = useState([]);
   const [map, setMap] = useState(null);
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
   const [follows, setFollows] = useState(new Set());
   const [authors, setAuthors] = useState(new Map<string, any>());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   useEffect(() => {
-    // 認証状態をチェック
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       
-      // ログイン済みの場合、お気に入りとフォローデータを取得
       if (user) {
-        // お気に入りデータを取得
         const { data: favData } = await supabase
           .from('user_favorites')
           .select('spot_id')
@@ -132,7 +138,6 @@ export default function HomePage() {
           setFavorites(new Set(favData.map(fav => fav.spot_id)));
         }
 
-        // フォローデータを取得
         const { data: followData } = await supabase
           .from('follows')
           .select('following_id')
@@ -147,6 +152,20 @@ export default function HomePage() {
     checkAuth();
   }, []);
 
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredSpots(spots);
+    } else {
+      const filtered = spots.filter((spot: any) => 
+        spot.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        spot.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        spot.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (spot.tags && spot.tags.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredSpots(filtered);
+    }
+  }, [searchTerm, spots]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -154,7 +173,6 @@ export default function HomePage() {
     setFollows(new Set());
   };
 
-  // お気に入りトグル機能
   const toggleFavorite = async (spotId: string) => {
     if (!user) {
       window.location.href = '/auth';
@@ -191,7 +209,6 @@ export default function HomePage() {
     }
   };
 
-  // フォロートグル機能
   const toggleFollow = async (authorId: string) => {
     if (!user) {
       window.location.href = '/auth';
@@ -236,15 +253,17 @@ export default function HomePage() {
   }, [viewMode]);
 
   const fetchSpots = async () => {
-    // spotsの基本情報を取得
+    setIsLoading(true);
+    setError(null);
+    
     const { data, error } = await supabase
       .from('spots')
       .select('*');
     
     if (data) {
       setSpots(data);
+      setFilteredSpots(data);
       
-      // author_idがあるスポットのauthor情報を取得
       const authorIds = data
         .filter(spot => spot.author_id)
         .map(spot => spot.author_id);
@@ -267,7 +286,9 @@ export default function HomePage() {
     
     if (error) {
       console.error('Error fetching spots:', error);
+      setError('スポットの読み込みに失敗しました');
     }
+    setIsLoading(false);
   };
 
   const initMap = async () => {
@@ -281,6 +302,13 @@ export default function HomePage() {
       const mapInstance = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 35.6762, lng: 139.6503 },
         zoom: 12,
+        styles: [
+          {
+            featureType: "poi",
+            elementType: "labels",
+            stylers: [{ visibility: "off" }]
+          }
+        ]
       });
 
       spots.forEach((spot: any) => {
@@ -297,186 +325,194 @@ export default function HomePage() {
     }
   };
 
-  const refreshData = () => {
-    fetchSpots();
-  };
+  // 空状態コンポーネント
+  const EmptyState = () => (
+    <div className="flex items-center justify-center py-24">
+      <div className="text-center">
+        <Coffee size={48} className="text-gray-300 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">まだスポットがありません</h3>
+        <p className="text-gray-500">新しいスポットが追加されるまでお待ちください</p>
+      </div>
+    </div>
+  );
+
+  // エラー状態コンポーネント
+  const ErrorState = () => (
+    <div className="flex items-center justify-center py-24">
+      <div className="text-center">
+        <AlertCircle size={48} className="text-red-300 mx-auto mb-4" />
+        <h3 className="text-xl font-semibold text-gray-700 mb-2">読み込みエラー</h3>
+        <p className="text-gray-500 mb-4">{error}</p>
+        <button
+          onClick={fetchSpots}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          再試行
+        </button>
+      </div>
+    </div>
+  );
 
   const GridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-      {spots.map((spot: any) => {
-        const author = spot.author_id ? authors.get(spot.author_id) : null;
-        return (
-          <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="relative">
-              {spot.instagram_url ? (
-                <InstagramEmbed url={spot.instagram_url} />
-              ) : (
-                <img 
-                  src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
-                  alt={spot.name}
-                  className="w-full h-48 object-cover"
-                />
-              )}
-              
-              {/* ボタンエリア */}
-              <div className="absolute top-3 right-3 flex gap-2">
-                {/* フォローボタン */}
-                {author && (
-                  <button
-                    onClick={() => toggleFollow(author.id)}
-                    className={`bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg ${
-                      follows.has(author.id) 
-                        ? 'bg-blue-500 text-white' 
-                        : ''
-                    }`}
-                  >
-                    {follows.has(author.id) ? (
-                      <User size={18} className="text-white" />
-                    ) : (
-                      <Plus size={18} className="text-gray-600 hover:text-blue-500" />
-                    )}
-                  </button>
-                )}
-                
-                {/* お気に入りボタン */}
-                <button
-                  onClick={() => toggleFavorite(spot.id)}
-                  className="bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                >
-                  <Heart 
-                    size={18} 
-                    className={favorites.has(spot.id) 
-                      ? "text-red-500 fill-red-500" 
-                      : "text-gray-400 hover:text-red-400"
-                    } 
-                  />
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-4">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="font-bold text-lg">{spot.name}</h3>
-              </div>
-              
-              <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
-              <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
-              
-              {spot.tags && (
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {spot.tags.split(',').map((tag: string, index: number) => (
-                    <span key={index} className="px-2 py-1 bg-pink-100 text-pink-600 text-xs rounded-full">
-                      {tag.trim()}
-                    </span>
-                  ))}
-                </div>
-              )}
-              
-              {/* 投稿者情報 */}
-              {author && (
-                <div className="flex items-center justify-between mb-3 p-2 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <UserCircle size={20} className="text-gray-500" />
-                    <div>
-                      <div className="text-sm font-medium text-gray-800">
-                        {author.display_name || author.username}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {author.instagram_username}
-                      </div>
+    <div className="px-4 py-6">
+      {/* Pinterest風マソンリーレイアウト */}
+      <div className="columns-1 md:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
+        {filteredSpots.map((spot: any) => {
+          const author = spot.author_id ? authors.get(spot.author_id) : null;
+          return (
+            <div key={spot.id} className="group break-inside-avoid mb-4">
+              <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                {/* 画像エリア - Pinterest風 */}
+                <div className="relative overflow-hidden">
+                  {spot.instagram_url ? (
+                    <InstagramEmbed url={spot.instagram_url} />
+                  ) : (
+                    <img 
+                      src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=600&fit=crop'}
+                      alt={spot.name}
+                      className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-500"
+                      style={{ aspectRatio: 'auto' }}
+                    />
+                  )}
+                  
+                  {/* Pinterest風オーバーレイ */}
+                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute top-4 right-4 flex gap-2">
+                      {/* ハートボタン - Pinterest風 */}
+                      <button
+                        onClick={() => toggleFavorite(spot.id)}
+                        className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 shadow-lg transform hover:scale-110 transition-all duration-200"
+                      >
+                        <Heart 
+                          size={20} 
+                          className={favorites.has(spot.id) ? "fill-white" : ""} 
+                        />
+                      </button>
                     </div>
+                    
+                    {/* 右下にフォローボタン */}
+                    {author && (
+                      <div className="absolute bottom-4 right-4">
+                        <button
+                          onClick={() => toggleFollow(author.id)}
+                          className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+                            follows.has(author.id)
+                              ? 'bg-gray-800 text-white hover:bg-gray-900'
+                              : 'bg-white text-gray-800 hover:bg-gray-100'
+                          }`}
+                        >
+                          {follows.has(author.id) ? 'フォロー中' : 'フォロー'}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <button
-                    onClick={() => toggleFollow(author.id)}
-                    className={`text-xs px-3 py-1 rounded-full transition-colors ${
-                      follows.has(author.id)
-                        ? 'bg-blue-500 text-white hover:bg-blue-600'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    {follows.has(author.id) ? 'フォロー中' : 'フォロー'}
-                  </button>
                 </div>
-              )}
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
-                <div className="flex gap-2">
-                  <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
-                    <Share2 size={16} />
-                  </button>
-                  {spot.instagram_url && (
-                    <a 
-                      href={spot.instagram_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                    >
-                      📸 Instagram投稿を見る
-                    </a>
+                
+                {/* 情報エリア - 最小限 */}
+                <div className="p-4">
+                  <h3 className="font-bold text-lg text-gray-900 mb-2 line-clamp-2">{spot.name}</h3>
+                  <div className="flex items-center gap-1 text-gray-500 text-sm mb-3">
+                    <MapPin size={12} />
+                    <span>{spot.location}</span>
+                  </div>
+                  
+                  {/* タグ - 最大2個まで */}
+                  {spot.tags && (
+                    <div className="flex flex-wrap gap-1 mb-3">
+                      {spot.tags.split(',').slice(0, 2).map((tag: string, index: number) => (
+                        <span key={index} className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          #{tag.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* 投稿者情報 - コンパクト */}
+                  {author && (
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-100">
+                      <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center">
+                        <UserCircle size={12} className="text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-800 truncate">
+                          {author.display_name || author.username}
+                        </div>
+                      </div>
+                      {spot.instagram_url && (
+                        <a 
+                          href={spot.instagram_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                        >
+                          <Eye size={12} />
+                        </a>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       {/* ヘッダー */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white/80 backdrop-blur-lg shadow-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">SpottMap</h1>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <MapPin size={18} className="text-white" />
+              </div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">SpottMap</h1>
             </div>
             
             {/* ナビゲーション */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {user ? (
                 <>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <UserCircle size={18} />
-                    <span>{user.email?.split('@')[0]}</span>
+                  <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
+                      <UserCircle size={12} className="text-white" />
+                    </div>
+                    <span className="font-medium">{user.email?.split('@')[0]}</span>
                   </div>
-                  <a
-                    href="/mymap"
-                    className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  <a href="/mymap"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
                   >
-                    <Heart size={18} />
+                    <Heart size={16} />
                     マイマップ
                   </a>
-                  <a
-                    href="/follow"
-                    className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  <a href="/follow"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
                   >
-                    <User size={18} />
+                    <User size={16} />
                     フォロー一覧
                   </a>
-                  <a
-                    href="/admin"
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  <a href="/admin"
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
                   >
-                    <Plus size={18} />
+                    <Plus size={16} />
                     スポット登録
                   </a>
                   <button
                     onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
                   >
-                    <LogOut size={18} />
+                    <LogOut size={16} />
                     ログアウト
                   </button>
                 </>
               ) : (
-                <a
-                  href="/auth"
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                <a href="/auth"
+                  className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
                 >
-                  <LogIn size={18} />
+                  <LogIn size={16} />
                   ログイン
                 </a>
               )}
@@ -487,77 +523,84 @@ export default function HomePage() {
 
       {/* メインコンテンツ */}
       <main className="max-w-7xl mx-auto">
-        {/* 統計情報 */}
-        <div className="p-6 bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-2">感度の高いローカルスポットを発見</h2>
-              <p className="text-blue-100">Instagram×地図で新しい場所を見つけよう</p>
-            </div>
-            <div className="flex gap-6 text-right">
-              <div>
-                <div className="text-2xl font-bold">{spots.length}</div>
-                <div className="text-sm text-blue-100">登録スポット</div>
+        {/* 検索・フィルターセクション - ヘッダー直下に移動 */}
+        <div className="bg-white border-b border-gray-100 shadow-sm pt-6">
+          <div className="px-6 py-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* 検索バー - プレースホルダー変更 */}
+              <div className="relative flex-1 max-w-md">
+                <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="カフェ、渋谷、おしゃれ..."
+                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
-              <div>
-                <div className="text-2xl font-bold">{authors.size}</div>
-                <div className="text-sm text-blue-100">投稿者</div>
+              
+              {/* 表示切替のみ */}
+              <div className="flex bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
+                    viewMode === 'grid' 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <Grid size={16} />
+                  カード
+                </button>
+                <button
+                  onClick={() => setViewMode('map')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
+                    viewMode === 'map' 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  <MapIcon size={16} />
+                  地図
+                </button>
               </div>
-              {user && (
-                <>
-                  <div>
-                    <div className="text-2xl font-bold">{favorites.size}</div>
-                    <div className="text-sm text-blue-100">お気に入り</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">{follows.size}</div>
-                    <div className="text-sm text-blue-100">フォロー中</div>
-                  </div>
-                </>
-              )}
             </div>
+            
+            {/* 検索結果表示 */}
+            {searchTerm && (
+              <div className="mt-4 text-sm text-gray-600">
+                <span className="font-medium">{filteredSpots.length}件</span>のスポットが見つかりました
+                {searchTerm && (
+                  <span className="ml-2">
+                    「<span className="font-medium text-blue-600">{searchTerm}</span>」の検索結果
+                  </span>
+                )}
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* コントロールパネル */}
-        <div className="p-4 bg-white border-b flex items-center justify-between">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('map')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                viewMode === 'map' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <MapIcon size={18} />
-              地図表示
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                viewMode === 'grid' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <Grid size={18} />
-              カード表示
-            </button>
-          </div>
-          
-          <button
-            onClick={refreshData}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            データ更新
-          </button>
         </div>
 
         {/* メイン表示エリア */}
         <div className="min-h-96">
-          {viewMode === 'map' ? (
-            <div id="map" className="w-full h-96"></div>
+          {isLoading ? (
+            // ローディング文言をシンプル化
+            <div className="flex items-center justify-center py-24">
+              <div className="text-center">
+                <div className="relative mb-6">
+                  <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-500 border-t-transparent mx-auto"></div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-xl font-semibold text-gray-700">スポットを読み込み中...</p>
+                  <p className="text-gray-500">少々お待ちください</p>
+                </div>
+              </div>
+            </div>
+          ) : error ? (
+            <ErrorState />
+          ) : filteredSpots.length === 0 ? (
+            <EmptyState />
+          ) : viewMode === 'map' ? (
+            <div id="map" className="w-full h-96 rounded-lg mx-6 mt-6 shadow-lg"></div>
           ) : (
             <GridView />
           )}
@@ -565,8 +608,23 @@ export default function HomePage() {
       </main>
 
       {/* フッター */}
-      <footer className="bg-gray-800 text-white p-4 text-center">
-        <p>&copy; 2024 SpottMap - 統一フォローシステム完成・お気に入り機能付き</p>
+      <footer className="bg-gradient-to-r from-gray-800 to-gray-900 text-white">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                <MapPin size={18} className="text-white" />
+              </div>
+              <div>
+                <div className="font-bold text-lg">SpottMap</div>
+                <div className="text-sm text-gray-300">感度の高いローカルスポットを発見</div>
+              </div>
+            </div>
+            <div className="text-sm text-gray-400">
+              &copy; 2024 SpottMap
+            </div>
+          </div>
+        </div>
       </footer>
     </div>
   );
