@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
@@ -123,6 +123,7 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [error, setError] = useState(null);
+  const mapRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     const checkAuth = async () => {
@@ -247,11 +248,11 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchSpots();
-    if (viewMode === 'map') {
-      initMap();
-    }
-  }, [viewMode]);
+  fetchSpots();
+  if (viewMode === 'map') {
+    setTimeout(() => initMap(), 100);
+  }
+}, [viewMode]);
 
   const fetchSpots = async () => {
     setIsLoading(true);
@@ -293,38 +294,45 @@ export default function HomePage() {
   };
 
   const initMap = async () => {
-    const loader = new Loader({
-      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
-      version: 'weekly',
+  // DOM要素の存在確認
+  if (!mapRef.current) {
+  console.error('Map element not found');
+  return;
+}
+
+  const loader = new Loader({
+    apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
+    version: 'weekly',
+  });
+
+  try {
+    const google = await loader.load();
+    const mapInstance = new google.maps.Map(mapRef.current, {
+      center: { lat: 35.6762, lng: 139.6503 },
+      zoom: 12,
+      styles: [
+        {
+          featureType: "poi",
+          elementType: "labels",
+          stylers: [{ visibility: "off" }]
+        }
+      ]
     });
 
-    try {
-      const google = await loader.load();
-      const mapInstance = new google.maps.Map(document.getElementById('map'), {
-        center: { lat: 35.6762, lng: 139.6503 },
-        zoom: 12,
-        styles: [
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }]
-          }
-        ]
+    spots.forEach((spot: any) => {
+      new google.maps.Marker({
+        position: { lat: spot.lat, lng: spot.lng },
+        map: mapInstance,
+        title: spot.name,
       });
+    });
 
-      spots.forEach((spot: any) => {
-        new google.maps.Marker({
-          position: { lat: spot.lat, lng: spot.lng },
-          map: mapInstance,
-          title: spot.name,
-        });
-      });
-
-      setMap(mapInstance);
-    } catch (error) {
-      console.error('Google Maps読み込みエラー:', error);
-    }
-  };
+    setMap(mapInstance);
+  } catch (error) {
+    console.error('Google Maps読み込みエラー:', error);
+  }
+};
+       
 
   // 空状態コンポーネント
   const EmptyState = () => (
@@ -646,7 +654,7 @@ export default function HomePage() {
           ) : filteredSpots.length === 0 ? (
             <EmptyState />
           ) : viewMode === 'map' ? (
-            <div id="map" className="w-full h-96 rounded-lg mx-6 mt-6 shadow-lg"></div>
+            <div ref={mapRef} className="w-full h-96 rounded-lg mx-6 mt-6 shadow-lg"></div>
           ) : (
             <GridView />
           )}
