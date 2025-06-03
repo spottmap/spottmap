@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { Grid, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check, Coffee, Palette } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Grid, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check, Coffee, Palette, X } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -103,16 +104,49 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
   );
 };
 // 新規カテゴリ作成モーダルコンポーネント
-const CategoryCreateModal = ({ isOpen, onClose, user, onCategoryCreated }) => {
+// 新規カテゴリ作成モーダルコンポーネント（2ステップ版）
+const CategoryCreateModal = ({ isOpen, onClose, user, onCategoryCreated, favoriteSpots }) => {
+  const [step, setStep] = useState(1); // 1: 名前入力, 2: スポット選択
   const [categoryName, setCategoryName] = useState('');
+  const [selectedSpots, setSelectedSpots] = useState(new Set());
   const [saving, setSaving] = useState(false);
 
-  const handleSave = async () => {
+  const handleNext = () => {
+    if (!categoryName.trim()) return;
+    setStep(2);
+  };
+
+  const handleBack = () => {
+    setStep(1);
+  };
+
+  const handleSpotToggle = (spotId) => {
+    setSelectedSpots(prev => {
+      const newSelection = new Set(prev);
+      if (newSelection.has(spotId)) {
+        newSelection.delete(spotId);
+      } else {
+        newSelection.add(spotId);
+      }
+      return newSelection;
+    });
+  };
+
+  const handleSelectAll = () => {
+    if (selectedSpots.size === favoriteSpots.length) {
+      setSelectedSpots(new Set()); // 全解除
+    } else {
+      setSelectedSpots(new Set(favoriteSpots.map(spot => spot.id))); // 全選択
+    }
+  };
+
+  const handleComplete = async () => {
     if (!user || !categoryName.trim()) return;
 
     setSaving(true);
     try {
-      const { data, error } = await supabase
+      // 1. カテゴリ作成
+      const { data: categoryData, error: categoryError } = await supabase
         .from('map_categories')
         .insert({
           user_id: user.id,
@@ -122,79 +156,171 @@ const CategoryCreateModal = ({ isOpen, onClose, user, onCategoryCreated }) => {
         .select()
         .single();
 
-      if (!error) {
-        onCategoryCreated();
-        setCategoryName('');
-        onClose();
-      } else {
-        alert(`カテゴリの作成に失敗しました: ${error.message}`);
+      if (categoryError) throw categoryError;
+
+      // 2. 選択されたスポットをカテゴリに追加
+      if (selectedSpots.size > 0) {
+        const spotCategoryInserts = Array.from(selectedSpots).map(spotId => ({
+          spot_id: spotId,
+          category_id: categoryData.id
+        }));
+
+        const { error: spotCategoryError } = await supabase
+          .from('spot_categories')
+          .insert(spotCategoryInserts);
+
+        if (spotCategoryError) throw spotCategoryError;
       }
+
+      // 3. 成功処理
+      onCategoryCreated();
+      handleClose();
     } catch (error) {
-      alert(`予期しないエラー: ${error.message}`);
+      alert(`カテゴリの作成に失敗しました: ${error.message}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleClose = () => {
+    setStep(1);
     setCategoryName('');
+    setSelectedSpots(new Set());
     onClose();
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-        <div className="p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">新規カテゴリ作成</h2>
-          
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              カテゴリ名
-            </label>
-            <input
-              type="text"
-              value={categoryName}
-              onChange={(e) => setCategoryName(e.target.value)}
-              placeholder="例: ランチスポット、デートスポット"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              maxLength={20}
-            />
-            <p className="text-xs text-gray-500 mt-1">{categoryName.length}/20文字</p>
-          </div>
+    <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={handleClose}>
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full h-[95vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+        
+        {step === 1 ? (
+  // ステップ1: カテゴリ名入力
+  <div className="p-6">
+  {/* 右上×ボタン追加 */}
+  <button
+    onClick={handleClose}
+    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+  >
+    <X size={20} />
+  </button>
 
-          <div className="mb-6 p-3 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">プレビュー</h3>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#F3F4F6' }}>
-                <Coffee size={20} style={{ color: '#6B7280' }} />
+  <h2 className="text-xl font-bold text-gray-900 mb-4">新規マイマップ作成</h2>
+
+<div className="mb-6">
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    マイマップ名
+  </label>
+  <input
+    type="text"
+    value={categoryName}
+    onChange={(e) => setCategoryName(e.target.value)}
+    placeholder="例: お気に入りカフェ"
+    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    maxLength={50}
+  />
+  <p className="text-xs text-gray-500 mt-1">{categoryName.length}/50文字</p>
+</div>
+
+<div className="flex justify-end">
+    <button
+      onClick={handleNext}
+      disabled={!categoryName.trim()}
+      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      次へ
+    </button>
+  </div>
+</div>
+        ) : (
+          // ステップ2: スポット選択
+          <div className="flex flex-col h-full">
+            <div className="p-6 border-b border-gray-200">
+  {/* 右上×ボタン追加 */}
+  <button
+    onClick={handleClose}
+    className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors"
+  >
+    <X size={20} />
+  </button>
+
+  <div className="flex items-center gap-4 mb-4">
+                <button
+                  onClick={handleBack}
+                  className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+                >
+                  <ArrowLeft size={20} />
+                  戻る
+                </button>
+                <h2 className="text-xl font-bold text-gray-900">保存済みから追加</h2>
               </div>
-              <div>
-                <div className="font-medium text-gray-900">
-                  {categoryName || 'カテゴリ名'}
-                </div>
-                <div className="text-sm text-gray-500">0件</div>
+              
+              <div className="flex items-center justify-between">
+  <p className="text-gray-600">
+    「{categoryName}」に追加するスポットを選択してください
+    <span className="ml-2 text-blue-600 font-medium">
+      {selectedSpots.size}件選択中
+    </span>
+  </p>
+  <button
+    onClick={handleSelectAll}
+    className="text-sm text-blue-600 hover:text-blue-700"
+  >
+    {selectedSpots.size === favoriteSpots.length ? '全解除' : '全選択'}
+  </button>
+</div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {favoriteSpots.map((spot) => (
+                  <div
+                    key={spot.id}
+                    className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all ${
+                      selectedSpots.has(spot.id) 
+                        ? 'border-blue-500 ring-2 ring-blue-200' 
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                    onClick={() => handleSpotToggle(spot.id)}
+                  >
+                    <div className="aspect-square">
+                      <img 
+                        src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&h=200&fit=crop'}
+                        alt={spot.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    
+                    {/* チェックマーク */}
+                    <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
+                      selectedSpots.has(spot.id) 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-white bg-opacity-80 text-gray-400'
+                    }`}>
+                      <Check size={16} />
+                    </div>
+                    
+                    <div className="p-3 bg-white">
+                      <h4 className="font-medium text-gray-900 text-sm truncate">{spot.name}</h4>
+                      <p className="text-xs text-gray-500 truncate">{spot.location}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={handleClose}
-              className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
-            >
-              キャンセル
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving || !categoryName.trim()}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? '作成中...' : '作成'}
-            </button>
+            <div className="p-6 border-t border-gray-200">
+              <button
+                onClick={handleComplete}
+                disabled={saving}
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium"
+              >
+                {saving ? '作成中...' : '完了'}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -358,8 +484,29 @@ export default function MyMapPage() {
   // Instagram風カテゴリ機能のstate
   const [categories, setCategories] = useState([]);
   const [categorySpotCounts, setCategorySpotCounts] = useState(new Map());
+  const [categorySpotImages, setCategorySpotImages] = useState(new Map());
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+const router = useRouter();
+
+  const handleAddToCategory = async (spotId, categoryId) => {
+    if (!categoryId) return;
+    
+    try {
+      const { error } = await supabase
+        .from('spot_categories')
+        .insert({
+          spot_id: spotId,
+          category_id: categoryId
+        });
+      
+      if (error) throw error;
+      alert('マイマップに追加しました！');
+    } catch (error) {
+      console.error('マイマップへの追加エラー:', error);
+      alert('追加に失敗しました');
+    }
+  };
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -403,10 +550,41 @@ export default function MyMapPage() {
       }
       setCategorySpotCounts(counts);
 
-    } catch (error) {
-      console.error('カテゴリの取得に失敗:', error);
-    }
+// カテゴリ画像取得
+await fetchCategorySpotImages(userId, categoriesData || []);
+} catch (error) {
+  console.error('カテゴリの取得に失敗:', error);
+}
   };
+  const fetchCategorySpotImages = async (userId, categories) => {
+  try {
+    const categoryImages = new Map();
+    
+    for (const category of categories) {
+      const { data: spotCategoriesData } = await supabase
+        .from('spot_categories')
+        .select('spot_id')
+        .eq('category_id', category.id)
+        .limit(4);
+      
+      if (spotCategoriesData && spotCategoriesData.length > 0) {
+        const spotIds = spotCategoriesData.map(sc => sc.spot_id);
+        
+        const { data: spotsData } = await supabase
+          .from('spots')
+          .select('image_url, name')
+          .in('id', spotIds)
+          .limit(4);
+        
+        categoryImages.set(category.id, spotsData || []);
+      }
+    }
+    
+    setCategorySpotImages(categoryImages);
+  } catch (error) {
+    console.error('カテゴリ画像取得エラー:', error);
+  }
+};
 
   const fetchPrivacySetting = async (userId) => {
     try {
@@ -537,15 +715,32 @@ export default function MyMapPage() {
   };
 
   // カテゴリ選択時のスポットフィルタリング
-  const getFilteredSpots = () => {
-    if (selectedCategory === 'all') {
-      return favoriteSpots;
-    }
-    
-    // 選択されたカテゴリのスポットIDを取得
-    // この部分は後で実装（カテゴリ別フィルタリング）
+  const [categorySpots, setCategorySpots] = useState([]);
+
+const getFilteredSpots = async (categoryId) => {
+  if (categoryId === 'all') {
     return favoriteSpots;
-  };
+  }
+  
+  try {
+    // 選択されたカテゴリのスポットIDを取得
+    const { data: spotCategoriesData } = await supabase
+      .from('spot_categories')
+      .select('spot_id')
+      .eq('category_id', categoryId);
+    
+    if (spotCategoriesData) {
+      const spotIds = spotCategoriesData.map(sc => sc.spot_id);
+      const filteredSpots = favoriteSpots.filter(spot => spotIds.includes(spot.id));
+      setCategorySpots(filteredSpots);
+      return filteredSpots;
+    }
+  } catch (error) {
+    console.error('カテゴリスポット取得エラー:', error);
+  }
+  
+  return [];
+};
 
   if (loading) {
     return (
@@ -712,29 +907,31 @@ export default function MyMapPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {/* すべてのスポット */}
             <div 
-              className={`relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
-                selectedCategory === 'all' ? 'ring-2 ring-blue-500' : ''
-              }`}
-              onClick={() => setSelectedCategory('all')}
-            >
-              <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                <div className="grid grid-cols-2 gap-1 w-full h-full p-2">
-                  {favoriteSpots.slice(0, 4).map((spot, index) => (
-                    <div key={index} className="bg-white rounded-lg overflow-hidden">
-                      <InstagramEmbed 
-                        url={spot.instagram_url}
-                        fallbackImage={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&h=200&fit=crop'}
-                        spotName={spot.name}
-                      />
-                    </div>
-                  ))}
-                  {favoriteSpots.length < 4 && (
-                    Array.from({ length: 4 - favoriteSpots.length }).map((_, index) => (
-                      <div key={`empty-${index}`} className="bg-gray-300 rounded-lg"></div>
-                    ))
-                  )}
-                </div>
-              </div>
+  className="relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200"
+  onClick={() => router.push('/mymap/category/all')}
+>
+              <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group">
+  <div className="relative w-full h-full p-2">
+    <div className="grid grid-cols-2 gap-0.5 w-full h-full">
+      {favoriteSpots.slice(0, 4).map((spot, index) => (
+        <div key={index} className="bg-white rounded-md overflow-hidden">
+          <InstagramEmbed 
+            url={spot.instagram_url}
+            fallbackImage={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&h=200&fit=crop'}
+            spotName={spot.name}
+          />
+        </div>
+      ))}
+      {favoriteSpots.length < 4 && (
+        Array.from({ length: 4 - favoriteSpots.length }).map((_, index) => (
+          <div key={`empty-${index}`} className="bg-gray-300 rounded-md"></div>
+        ))
+      )}
+    </div>
+    {/* 全体にマスクオーバーレイ */}
+    <div className="absolute inset-0 bg-black opacity-15 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none"></div>
+  </div>
+</div>
               <div className="p-3 bg-white">
                 <h4 className="font-medium text-gray-900">すべてのスポット</h4>
                 <p className="text-sm text-gray-500">{favoriteSpots.length}件</p>
@@ -748,22 +945,41 @@ export default function MyMapPage() {
                 className={`relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
                   selectedCategory === category.id ? 'ring-2 ring-blue-500' : ''
                 }`}
-                onClick={() => setSelectedCategory(category.id)}
+                onClick={() => {
+  router.push(`/mymap/category/${category.id}`);
+}}
               >
                 <div 
                   className="aspect-square flex items-center justify-center"
                   style={{ backgroundColor: category.color + '20' }}
                 >
-                  <div className="grid grid-cols-2 gap-1 w-full h-full p-2">
-                    {/* カテゴリ内のスポット画像を2x2で表示 */}
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div key={index} className="bg-white rounded-lg overflow-hidden">
-                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
-                          <Coffee size={16} style={{ color: category.color }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <div className="w-full h-full p-2">
+  {(() => {
+    const categoryImages = categorySpotImages.get(category.id) || [];
+    if (categoryImages.length > 0) {
+      // スポットがある場合：1枚目の画像を大きく表示
+      return (
+        <div className="w-full h-full bg-white rounded-lg overflow-hidden group">
+  <div className="relative w-full h-full">
+    <img 
+      src={categoryImages[0].image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=400&fit=crop'}
+      alt={categoryImages[0].name}
+      className="w-full h-full object-cover"
+    />
+    <div className="absolute inset-0 bg-black opacity-15 group-hover:opacity-0 transition-opacity duration-300"></div>
+  </div>
+</div>
+      );
+    } else {
+      // スポットがない場合：Coffeeアイコン表示
+      return (
+        <div className="w-full h-full bg-gray-200 rounded-lg flex items-center justify-center">
+          <Coffee size={32} style={{ color: category.color }} />
+        </div>
+      );
+    }
+  })()}
+</div>
                 </div>
                 <div className="p-3 bg-white">
                   <h4 className="font-medium text-gray-900">{category.name}</h4>
@@ -773,112 +989,61 @@ export default function MyMapPage() {
             ))}
 
             {/* 新規カテゴリ作成カード */}
-            <div className="relative cursor-pointer rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors">
-              <div className="aspect-square bg-gray-50 flex items-center justify-center">
-                <div className="text-center">
-                  <Plus size={32} className="text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500 font-medium">新規カテゴリ</p>
-                </div>
-              </div>
-              <div className="p-3 bg-white">
-                <h4 className="font-medium text-gray-900">カテゴリを追加</h4>
-                <p className="text-sm text-gray-500">分類を作成</p>
-              </div>
-            </div>
+<div 
+  className="relative cursor-pointer rounded-2xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-gray-400 transition-colors"
+  onClick={() => setShowCategoryModal(true)}
+>
+  <div className="aspect-square bg-gray-50 flex items-center justify-center">
+    <div className="text-center">
+      <Plus size={32} className="text-gray-400 mx-auto mb-2" />
+      <p className="text-sm text-gray-500 font-medium">新規マイマップ</p>
+    </div>
+  </div>
+  <div className="p-3 bg-white">
+    <h4 className="font-medium text-gray-900">マイマップを追加</h4>
+    <p className="text-sm text-gray-500">分類を作成</p>
+  </div>
+</div>
           </div>
         </div>
 
-        {/* スポット表示エリア */}
-        <div className="p-6">
-          {favoriteSpots.length === 0 ? (
-            <div className="text-center py-16">
-              <Heart size={64} className="mx-auto text-gray-300 mb-6" />
-              <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                まだお気に入りスポットがありません
-              </h3>
-              <p className="text-gray-600 mb-8">
-                気になるスポットを見つけたら、ハートボタンを押してお気に入りに追加しましょう
-              </p>
-              
-                <a href="/"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <MapIcon size={20} />
-                スポットを探しに行く
-              </a>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {getFilteredSpots().map((spot) => (
-                <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="relative">
-                    {spot.instagram_url ? (
-                      <InstagramEmbed 
-                        url={spot.instagram_url}
-                        fallbackImage={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
-                        spotName={spot.name}
-                      />
-                    ) : (
+        {/* 選択されたカテゴリのスポット一覧 */}
+        {selectedCategory !== 'all' && (
+          <div className="p-6 bg-white">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">
+              {categories.find(c => c.id === selectedCategory)?.name}のスポット
+            </h3>
+            
+            {categorySpots.length === 0 ? (
+              <div className="text-center py-12">
+                <div className="text-gray-400 mb-4">
+                  このマイマップにはまだスポットが登録されていません
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {categorySpots.map((spot) => (
+                  <div key={spot.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div className="aspect-video">
                       <img 
                         src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop'}
-                       alt={spot.name}
-                       className="w-full h-48 object-cover"
-                     />
-                   )}
-                   
-                   <button
-                     onClick={() => toggleFavorite(spot.id)}
-                     className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full p-2 transition-all duration-200 shadow-md hover:shadow-lg"
-                   >
-                     <Heart 
-                       size={20} 
-                       className={favorites.has(spot.id) 
-                         ? "text-red-500 fill-red-500" 
-                         : "text-gray-400 hover:text-red-400"
-                       } 
-                     />
-                   </button>
-                 </div>
-                 
-                 <div className="p-4">
-                   <h3 className="text-lg font-semibold text-gray-800 mb-2">{spot.name}</h3>
-                   <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
-                   <p className="text-gray-700 text-sm mb-3">{spot.description}</p>
-                   
-                   {spot.tags && (
-                     <div className="flex flex-wrap gap-1 mb-3">
-                       {spot.tags.split(',').map((tag, index) => (
-                         <span key={index} className="px-2 py-1 bg-red-100 text-red-600 text-xs rounded-full">
-                           {tag.trim()}
-                         </span>
-                       ))}
-                     </div>
-                   )}
-                   
-                   <div className="flex items-center justify-between">
-                     <span className="text-sm text-gray-500">@{spot.instagram_user}</span>
-                     <div className="flex gap-2">
-                       <button className="p-2 text-gray-400 hover:text-blue-500 transition-colors">
-                         <Share2 size={16} />
-                       </button>
-                       {spot.instagram_url && (
-                         <a 
-                           href={spot.instagram_url} 
-                           target="_blank" 
-                           rel="noopener noreferrer"
-                           className="text-sm text-pink-500 hover:text-pink-600 flex items-center gap-1"
-                         >
-                           📸 Instagram投稿を見る
-                         </a>
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               </div>
-             ))}
-           </div>
-         )}
-       </div>
+                        alt={spot.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="p-4">
+                      <h4 className="font-bold text-gray-900 mb-2">{spot.name}</h4>
+                      <p className="text-gray-600 text-sm mb-2">{spot.location}</p>
+                      <p className="text-gray-500 text-xs">{spot.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        
      </main>
 
      {/* 公開設定モーダル */}
@@ -892,15 +1057,16 @@ export default function MyMapPage() {
 
       {/* カテゴリ作成モーダル */}
       <CategoryCreateModal
-        isOpen={showCategoryModal}
-        onClose={() => setShowCategoryModal(false)}
-        user={user}
-        onCategoryCreated={() => {
-          if (user) {
-            fetchCategories(user.id);
-          }
-        }}
-      />
+  isOpen={showCategoryModal}
+  onClose={() => setShowCategoryModal(false)}
+  user={user}
+  favoriteSpots={favoriteSpots}  // 追加
+  onCategoryCreated={() => {
+    if (user) {
+      fetchCategories(user.id);
+    }
+  }}
+/>
 
      {/* フッター */}
      <footer className="bg-gray-800 text-white p-4 text-center">
