@@ -1,6 +1,5 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
@@ -111,7 +110,6 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
     </div>
   );
 };
-import { Suspense } from 'react';
 
 // スポット詳細モーダルコンポーネント
 const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorite }: any) => {
@@ -246,8 +244,15 @@ export default function HomePage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [error, setError] = useState(null);
   const mapRef = useRef<HTMLDivElement>(null);
-  const searchParams = useSearchParams();
-  const categoryId = searchParams.get('category');
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+
+useEffect(() => {
+  // クライアントサイドでのみURLパラメータを取得
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    setCategoryId(urlParams.get('category'));
+  }
+}, []);
   const [selectedSpot, setSelectedSpot] = useState(null);
   const [showSpotModal, setShowSpotModal] = useState(false);
   
@@ -621,8 +626,7 @@ export default function HomePage() {
   );
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+  <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
       {/* ヘッダー */}
       <header className="bg-white/80 backdrop-blur-lg shadow-sm border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -844,6 +848,5 @@ export default function HomePage() {
         toggleFavorite={toggleFavorite}
       />
     </div>
-    </Suspense>
   );
 }
