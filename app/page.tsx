@@ -478,9 +478,20 @@ if (categoryId && categoryId !== 'all') {
 
   try {
     const google = await loader.load();
-    const mapInstance = new google.maps.Map(mapRef.current, {
-      center: { lat: 35.6762, lng: 139.6503 },
-      zoom: 12,
+    // スポットの中心座標を計算
+let center = { lat: 35.6762, lng: 139.6503 }; // デフォルト
+if (spots.length > 0) {
+  const latSum = spots.reduce((sum, spot) => sum + spot.lat, 0);
+  const lngSum = spots.reduce((sum, spot) => sum + spot.lng, 0);
+  center = {
+    lat: latSum / spots.length,
+    lng: lngSum / spots.length
+  };
+}
+
+const mapInstance = new google.maps.Map(mapRef.current, {
+  center: center, // 計算された中心座標
+  zoom: 12,
       styles: [
         {
           featureType: "poi",
@@ -547,7 +558,13 @@ if (categoryId && categoryId !== 'all') {
           const author = spot.author_id ? authors.get(spot.author_id) : null;
           return (
             <div key={spot.id} className="group break-inside-avoid mb-4">
-              <div className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+  <div 
+    className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
+    onClick={() => {
+      setSelectedSpot(spot);
+      setShowSpotModal(true);
+    }}
+  >
                 {/* 画像エリア - Pinterest風 */}
                 <div className="relative overflow-hidden">
                   {spot.instagram_url ? (
@@ -566,9 +583,12 @@ if (categoryId && categoryId !== 'all') {
                     <div className="absolute top-4 right-4 flex gap-2">
                       {/* ハートボタン - Pinterest風 */}
                       <button
-                        onClick={() => toggleFavorite(spot.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 shadow-lg transform hover:scale-110 transition-all duration-200"
-                      >
+  onClick={(e) => {
+    e.stopPropagation();
+    toggleFavorite(spot.id);
+  }}
+  className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 shadow-lg transform hover:scale-110 transition-all duration-200"
+>
                         <Heart 
                           size={20} 
                           className={favorites.has(spot.id) ? "fill-white" : ""} 
@@ -580,8 +600,11 @@ if (categoryId && categoryId !== 'all') {
                     {author && (
                       <div className="absolute bottom-4 right-4">
                         <button
-                          onClick={() => toggleFollow(author.id)}
-                          className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
+  onClick={(e) => {
+    e.stopPropagation();
+    toggleFollow(author.id);
+  }}
+  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 ${
                             follows.has(author.id)
                               ? 'bg-gray-800 text-white hover:bg-gray-900'
                               : 'bg-white text-gray-800 hover:bg-gray-100'
@@ -626,11 +649,12 @@ if (categoryId && categoryId !== 'all') {
                       </div>
                       {spot.instagram_url && (
   <a 
-    href={spot.instagram_url} 
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
-  >
+  href={spot.instagram_url} 
+  target="_blank" 
+  rel="noopener noreferrer"
+  onClick={(e) => e.stopPropagation()}
+  className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
+>
     <Eye size={12} />
   </a>
 )}
@@ -831,7 +855,7 @@ if (categoryId && categoryId !== 'all') {
           ) : filteredSpots.length === 0 ? (
             <EmptyState />
           ) : viewMode === 'map' ? (
-            <div ref={mapRef} className="w-full h-96 rounded-lg mx-6 mt-6 shadow-lg"></div>
+            <div ref={mapRef} className="w-full h-[50vh] md:h-[60vh] lg:h-[70vh] min-h-[400px] max-h-[85vh] rounded-lg mt-6 shadow-lg"></div>
           ) : (
             <GridView />
           )}
