@@ -250,7 +250,13 @@ useEffect(() => {
   // クライアントサイドでのみURLパラメータを取得
   if (typeof window !== 'undefined') {
     const urlParams = new URLSearchParams(window.location.search);
-    setCategoryId(urlParams.get('category'));
+    const categoryParam = urlParams.get('category');
+    setCategoryId(categoryParam);
+    
+    // カテゴリパラメータがある場合は地図表示に切り替え
+    if (categoryParam) {
+      setViewMode('map');
+    }
   }
 }, []);
   const [selectedSpot, setSelectedSpot] = useState(null);
@@ -380,10 +386,13 @@ useEffect(() => {
 
   useEffect(() => {
   fetchSpots();
-  if (viewMode === 'map') {
+}, [categoryId]);
+
+useEffect(() => {
+  if (viewMode === 'map' && spots.length > 0) {
     setTimeout(() => initMap(), 100);
   }
-}, [viewMode, categoryId]);
+}, [viewMode, spots]);
 
   const fetchSpots = async () => {
   setIsLoading(true);
@@ -392,24 +401,32 @@ useEffect(() => {
   let query = supabase.from('spots').select('*');
   
   // カテゴリ指定がある場合はフィルタリング
-  if (categoryId && categoryId !== 'all') {
-    // カテゴリに属するスポットIDを取得
-    const { data: spotCategoriesData } = await supabase
-      .from('spot_categories')
-      .select('spot_id')
-      .eq('category_id', categoryId);
-    
-    if (spotCategoriesData && spotCategoriesData.length > 0) {
-      const spotIds = spotCategoriesData.map(sc => sc.spot_id);
-      query = query.in('id', spotIds);
-    } else {
-      // カテゴリにスポットがない場合は空配列
-      setSpots([]);
-      setFilteredSpots([]);
-      setIsLoading(false);
-      return;
-    }
+if (categoryId && categoryId !== 'all') {
+  // カテゴリに属するスポットIDを取得
+  const { data: spotCategoriesData, error: categoriesError } = await supabase
+    .from('spot_categories')
+    .select('spot_id')
+    .eq('category_id', categoryId);
+
+  console.log('categoryId:', categoryId);
+  console.log('spotCategoriesData:', spotCategoriesData);
+  console.log('categoriesError:', categoriesError);
+
+  if (spotCategoriesData && spotCategoriesData.length > 0) {
+    const spotIds = spotCategoriesData.map(item => item.spot_id);
+    console.log('spotIds:', spotIds);
+    query = query.in('id', spotIds);
+  } else {
+    // カテゴリにスポットがない場合は空配列
+    setSpots([]);
+    setFilteredSpots([]);
+    setIsLoading(false);
+    return;
   }
+} else if (categoryId === 'all') {
+  // 'all'の場合は全スポットを取得（フィルタリングしない）
+  console.log('showing all spots');
+}
   
   const { data, error } = await query;
     
@@ -445,11 +462,14 @@ useEffect(() => {
   };
 
   const initMap = async () => {
+  console.log('initMap called with spots:', spots);
+  console.log('spots length:', spots.length);
+  
   // DOM要素の存在確認
   if (!mapRef.current) {
-  console.error('Map element not found');
-  return;
-}
+    console.error('Map element not found');
+    return;
+  }
 
   const loader = new Loader({
     apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,

@@ -987,15 +987,15 @@ const getFilteredSpots = async (categoryId) => {
     <p className="text-sm text-gray-500">{categorySpotCounts.get(category.id) || 0}件</p>
   </div>
   <button
-    onClick={(e) => {
-      e.stopPropagation(); // カード全体のクリックを防ぐ
-      router.push(`/?category=${category.id}`);
-    }}
-    className="ml-2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-    title="地図で見る"
-  >
-    <MapIcon size={18} />
-  </button>
+  onClick={(e) => {
+    e.stopPropagation(); // カード全体のクリックを防ぐ
+    window.location.href = `/?category=${category.id}`;
+  }}
+  className="ml-2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+  title="地図で見る"
+>
+  <MapIcon size={18} />
+</button>
 </div>
               </div>
             ))}

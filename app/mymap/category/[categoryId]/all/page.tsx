@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, Coffee, Eye } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -104,92 +104,53 @@ const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
   );
 };
 
-export default function CategorySpotsPage() {
+export default function AllSpotsPage() {
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
-  const [categorySpots, setCategorySpots] = useState([]);
-  const [category, setCategory] = useState(null);
+  const [favoriteSpots, setFavoriteSpots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [follows, setFollows] = useState(new Set());
   const [authors, setAuthors] = useState(new Map());
   const router = useRouter();
-  const params = useParams();
-  const categoryId = params.categoryId;
 
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
       
-      if (user && categoryId) {
-        await fetchCategoryAndSpots(user.id, categoryId);
+      if (user) {
+        await fetchFavoriteSpots(user.id);
       } else {
         setLoading(false);
       }
     };
     
     checkAuth();
-  }, [categoryId]);
+  }, []);
 
-  const fetchCategoryAndSpots = async (userId, categoryId) => {
+  const fetchFavoriteSpots = async (userId) => {
     try {
       setLoading(true);
       
-      // カテゴリ情報取得
-      const { data: categoryData, error: categoryError } = await supabase
-        .from('map_categories')
-        .select('*')
-        .eq('id', categoryId)
-        .eq('user_id', userId)
-        .single();
-
-      if (categoryError) {
-        console.error('カテゴリ取得エラー:', categoryError);
-        setLoading(false);
-        return;
-      }
-
-      setCategory(categoryData);
-
-      // カテゴリに属するスポットID取得
-      const { data: spotCategoriesData, error: spotCategoriesError } = await supabase
-        .from('spot_categories')
+      const { data: favData, error: favError } = await supabase
+        .from('user_favorites')
         .select('spot_id')
-        .eq('category_id', categoryId);
+        .eq('user_id', userId);
 
-      if (spotCategoriesError) {
-        console.error('スポットカテゴリ取得エラー:', spotCategoriesError);
-        setLoading(false);
-        return;
-      }
+      if (favError) throw favError;
 
-      if (spotCategoriesData && spotCategoriesData.length > 0) {
-        const spotIds = spotCategoriesData.map(sc => sc.spot_id);
+      if (favData && favData.length > 0) {
+        const spotIds = favData.map(fav => fav.spot_id);
+        setFavorites(new Set(spotIds));
 
-        // スポット詳細取得
         const { data: spotsData, error: spotsError } = await supabase
           .from('spots')
           .select('*')
           .in('id', spotIds);
 
-        if (spotsError) {
-          console.error('スポット取得エラー:', spotsError);
-          setLoading(false);
-          return;
-        }
+        if (spotsError) throw spotsError;
 
-        setCategorySpots(spotsData || []);
-
-        // お気に入り情報取得
-        const { data: favData } = await supabase
-          .from('user_favorites')
-          .select('spot_id')
-          .eq('user_id', userId)
-          .in('spot_id', spotIds);
-
-        if (favData) {
-          setFavorites(new Set(favData.map(fav => fav.spot_id)));
-        }
+        setFavoriteSpots(spotsData || []);
 
         // 著者情報取得
         const authorIds = spotsData
@@ -221,10 +182,12 @@ export default function CategorySpotsPage() {
           setFollows(new Set(followData.map(follow => follow.following_id)));
         }
       } else {
-        setCategorySpots([]);
+        setFavoriteSpots([]);
+        setFavorites(new Set());
       }
     } catch (error) {
-      console.error('データ取得エラー:', error);
+      console.error('お気に入りスポットの取得に失敗:', error);
+      setFavoriteSpots([]);
     } finally {
       setLoading(false);
     }
@@ -252,7 +215,7 @@ export default function CategorySpotsPage() {
             newFavorites.delete(spotId);
             return newFavorites;
           });
-          setCategorySpots(prev => prev.filter(spot => spot.id !== spotId));
+          setFavoriteSpots(prev => prev.filter(spot => spot.id !== spotId));
         }
       } else {
         const { error } = await supabase
@@ -264,6 +227,15 @@ export default function CategorySpotsPage() {
         
         if (!error) {
           setFavorites(prev => new Set([...prev, spotId]));
+          const { data: spotData } = await supabase
+            .from('spots')
+            .select('*')
+            .eq('id', spotId)
+            .single();
+          
+          if (spotData) {
+            setFavoriteSpots(prev => [...prev, spotData]);
+          }
         }
       }
     } catch (error) {
@@ -315,7 +287,7 @@ export default function CategorySpotsPage() {
     await supabase.auth.signOut();
     setUser(null);
     setFavorites(new Set());
-    setCategorySpots([]);
+    setFavoriteSpots([]);
   };
 
   if (loading) {
@@ -339,7 +311,7 @@ export default function CategorySpotsPage() {
                   <ArrowLeft size={20} />
                   <span>マイマップに戻る</span>
                 </button>
-                <h1 className="text-xl font-bold text-gray-900">{category?.name || 'カテゴリ'}</h1>
+                <h1 className="text-xl font-bold text-gray-900">すべてのスポット</h1>
               </div>
               
               <a href="/auth" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
@@ -363,38 +335,6 @@ export default function CategorySpotsPage() {
     );
   }
 
-  if (!category) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm border-b">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between h-16">
-              <div className="flex items-center gap-4">
-                <button onClick={() => router.back()} className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
-                  <ArrowLeft size={20} />
-                  <span>マイマップに戻る</span>
-                </button>
-                <h1 className="text-xl font-bold text-gray-900">カテゴリが見つかりません</h1>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
-          <Coffee size={64} className="mx-auto text-gray-300 mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">カテゴリが見つかりません</h2>
-          <p className="text-gray-600 mb-8">指定されたカテゴリは存在しないか、アクセス権限がありません。</p>
-          <button 
-            onClick={() => router.push('/mymap')}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            マイマップに戻る
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ヘッダー */}
@@ -406,13 +346,13 @@ export default function CategorySpotsPage() {
                 <ArrowLeft size={20} />
                 <span>マイマップに戻る</span>
               </button>
-              <h1 className="text-xl font-bold text-gray-900">{category.name}</h1>
+              <h1 className="text-xl font-bold text-gray-900">すべてのスポット</h1>
             </div>
             
             <div className="flex items-center gap-4">
               {/* 地図で見るボタン */}
               <button
-                onClick={() => window.location.href = `/?category=${categoryId}`}
+                onClick={() => window.location.href = '/?category=all'}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 <MapIcon size={18} />
@@ -441,31 +381,26 @@ export default function CategorySpotsPage() {
       {/* メインコンテンツ */}
       <main className="max-w-7xl mx-auto p-6">
         {/* 統計情報 */}
-        <div 
-          className="text-white rounded-lg p-6 mb-6"
-          style={{ 
-            background: `linear-gradient(135deg, ${category.color}CC, ${category.color}FF)` 
-          }}
-        >
+        <div className="bg-gradient-to-r from-red-500 to-pink-600 text-white rounded-lg p-6 mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold mb-2">{category.name}</h2>
-              <p className="opacity-90">このマイマップに保存されたスポットの一覧です</p>
+              <h2 className="text-2xl font-bold mb-2">すべてのスポット</h2>
+              <p className="text-red-100">あなたが保存したお気に入りスポットの一覧です</p>
             </div>
             <div className="text-right">
-              <div className="text-3xl font-bold">{categorySpots.length}</div>
-              <div className="text-sm opacity-80">スポット</div>
+              <div className="text-3xl font-bold">{favoriteSpots.length}</div>
+              <div className="text-sm text-red-100">お気に入りスポット</div>
             </div>
           </div>
         </div>
 
         {/* スポット一覧 */}
-        {categorySpots.length === 0 ? (
+        {favoriteSpots.length === 0 ? (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
               <Coffee size={48} className="text-gray-300 mx-auto mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">このマイマップにはスポットがありません</h3>
-              <p className="text-gray-500 mb-6">気になるスポットを♡ボタンで保存して、マイマップに追加してみましょう</p>
+              <h3 className="text-xl font-semibold text-gray-700 mb-2">まだスポットがありません</h3>
+              <p className="text-gray-500 mb-6">気になるスポットを♡ボタンで保存してみましょう</p>
               <a href="/" className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
                 スポットを探す
               </a>
@@ -473,7 +408,7 @@ export default function CategorySpotsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {categorySpots.map((spot) => {
+            {favoriteSpots.map((spot) => {
               const author = spot.author_id ? authors.get(spot.author_id) : null;
               return (
                 <div key={spot.id} className="group break-inside-avoid mb-4">
