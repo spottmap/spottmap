@@ -894,7 +894,7 @@ const getFilteredSpots = async (categoryId) => {
         {/* Instagram風カテゴリ一覧 */}
         <div className="p-6 bg-white border-b border-gray-200">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-bold text-gray-900">カテゴリ</h3>
+            <h3 className="text-xl font-bold text-gray-900">マイマップ</h3>
             <button 
   onClick={() => setShowCategoryModal(true)}
   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -981,10 +981,22 @@ const getFilteredSpots = async (categoryId) => {
   })()}
 </div>
                 </div>
-                <div className="p-3 bg-white">
-                  <h4 className="font-medium text-gray-900">{category.name}</h4>
-                  <p className="text-sm text-gray-500">{categorySpotCounts.get(category.id) || 0}件</p>
-                </div>
+                <div className="p-3 bg-white flex justify-between items-start">
+  <div className="flex-1">
+    <h4 className="font-medium text-gray-900">{category.name}</h4>
+    <p className="text-sm text-gray-500">{categorySpotCounts.get(category.id) || 0}件</p>
+  </div>
+  <button
+    onClick={(e) => {
+      e.stopPropagation(); // カード全体のクリックを防ぐ
+      router.push(`/?category=${category.id}`);
+    }}
+    className="ml-2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+    title="地図で見る"
+  >
+    <MapIcon size={18} />
+  </button>
+</div>
               </div>
             ))}
 

@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
 
@@ -17,7 +18,8 @@ import {
   MapPin, 
   Eye, 
   AlertCircle,
-  Coffee
+  Coffee,
+  X
 } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
@@ -109,6 +111,123 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
     </div>
   );
 };
+// スポット詳細モーダルコンポーネント
+const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorite }: any) => {
+  if (!isOpen || !spot) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 flex items-center justify-center z-[100] p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* モーダルヘッダー */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className="text-lg font-bold text-blue-600">SpottMap</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => toggleFavorite(spot.id)}
+              className="p-2 text-gray-600 hover:text-red-500 transition-colors"
+            >
+              <Heart 
+                size={20} 
+                className={favorites.has(spot.id) ? "fill-red-500 text-red-500" : ""} 
+              />
+            </button>
+            <button 
+              onClick={() => {
+                if (navigator.share) {
+                  navigator.share({
+                    title: spot.name,
+                    text: spot.description,
+                    url: window.location.href
+                  });
+                }
+              }}
+              className="p-2 text-gray-600 hover:text-blue-500 transition-colors"
+            >
+              <Share2 size={20} />
+            </button>
+            <button 
+              onClick={onClose}
+              className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* 画像 */}
+        <div className="aspect-square bg-gray-100">
+          <img 
+            src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600&h=600&fit=crop'}
+            alt={spot.name}
+            className="w-full h-full object-cover"
+          />
+        </div>
+
+        {/* スポット情報 */}
+        <div className="p-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {spot.name}
+          </h1>
+          
+          {spot.location && (
+            <div className="flex items-center gap-2 text-gray-600 mb-4">
+              <MapPin size={16} />
+              <span>{spot.location}</span>
+            </div>
+          )}
+
+          {spot.description && (
+            <p className="text-gray-700 leading-relaxed mb-6">
+              {spot.description}
+            </p>
+          )}
+
+          {/* タグ */}
+          {spot.tags && (
+            <div className="flex flex-wrap gap-2 mb-6">
+              {spot.tags.split(',').map((tag: string, index: number) => (
+                <span key={index} className="px-3 py-1 bg-blue-100 text-blue-800 text-sm rounded-full">
+                  #{tag.trim()}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Instagram投稿 */}
+          {spot.instagram_url && (
+            <div className="border-t pt-4 mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Instagram投稿
+              </h3>
+              <InstagramEmbed url={spot.instagram_url} />
+              
+              <div className="mt-4">
+                <a 
+                  href={spot.instagram_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-600 text-white rounded-lg hover:from-pink-600 hover:to-purple-700 transition-all"
+                >
+                  <Eye size={16} />
+                  Instagram で見る
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function HomePage() {
   const [viewMode, setViewMode] = useState('grid');
@@ -124,6 +243,10 @@ export default function HomePage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [error, setError] = useState(null);
   const mapRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
+  const categoryId = searchParams.get('category');
+  const [selectedSpot, setSelectedSpot] = useState(null);
+  const [showSpotModal, setShowSpotModal] = useState(false);
   
   useEffect(() => {
     const checkAuth = async () => {
@@ -252,15 +375,35 @@ export default function HomePage() {
   if (viewMode === 'map') {
     setTimeout(() => initMap(), 100);
   }
-}, [viewMode]);
+}, [viewMode, categoryId]);
 
   const fetchSpots = async () => {
-    setIsLoading(true);
-    setError(null);
+  setIsLoading(true);
+  setError(null);
+  
+  let query = supabase.from('spots').select('*');
+  
+  // カテゴリ指定がある場合はフィルタリング
+  if (categoryId && categoryId !== 'all') {
+    // カテゴリに属するスポットIDを取得
+    const { data: spotCategoriesData } = await supabase
+      .from('spot_categories')
+      .select('spot_id')
+      .eq('category_id', categoryId);
     
-    const { data, error } = await supabase
-      .from('spots')
-      .select('*');
+    if (spotCategoriesData && spotCategoriesData.length > 0) {
+      const spotIds = spotCategoriesData.map(sc => sc.spot_id);
+      query = query.in('id', spotIds);
+    } else {
+      // カテゴリにスポットがない場合は空配列
+      setSpots([]);
+      setFilteredSpots([]);
+      setIsLoading(false);
+      return;
+    }
+  }
+  
+  const { data, error } = await query;
     
     if (data) {
       setSpots(data);
@@ -320,12 +463,18 @@ export default function HomePage() {
     });
 
     spots.forEach((spot: any) => {
-      new google.maps.Marker({
-        position: { lat: spot.lat, lng: spot.lng },
-        map: mapInstance,
-        title: spot.name,
-      });
-    });
+  const marker = new google.maps.Marker({
+    position: { lat: spot.lat, lng: spot.lng },
+    map: mapInstance,
+    title: spot.name,
+  });
+  
+  // マーカークリックでモーダル表示
+  marker.addListener('click', () => {
+    setSelectedSpot(spot);
+    setShowSpotModal(true);
+  });
+});
 
     setMap(mapInstance);
   } catch (error) {
@@ -448,15 +597,15 @@ export default function HomePage() {
                         </div>
                       </div>
                       {spot.instagram_url && (
-                        <a 
-                          href={spot.instagram_url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
-                        >
-                          <Eye size={12} />
-                        </a>
-                      )}
+  <a 
+    href={spot.instagram_url} 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
+  >
+    <Eye size={12} />
+  </a>
+)}
                     </div>
                   )}
                 </div>
@@ -680,6 +829,16 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* スポット詳細モーダル */}
+      <SpotDetailModal
+        spot={selectedSpot}
+        isOpen={showSpotModal}
+        onClose={() => setShowSpotModal(false)}
+        user={user}
+        favorites={favorites}
+        toggleFavorite={toggleFavorite}
+      />
     </div>
   );
 }
