@@ -677,6 +677,12 @@ export default function MyMapPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
 const [showCategoryModal, setShowCategoryModal] = useState(false);
 const [openMenuId, setOpenMenuId] = useState(null);
+const [showAccountModal, setShowAccountModal] = useState(false);
+const [profileImage, setProfileImage] = useState(null);
+const [previewImage, setPreviewImage] = useState(null);
+const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+const [selectedFile, setSelectedFile] = useState(null);
+const [uploadingImage, setUploadingImage] = useState(false);
 const [showSharingModal, setShowSharingModal] = useState(false);
 const [selectedCategoryForSharing, setSelectedCategoryForSharing] = useState(null);
   const router = useRouter();
@@ -709,6 +715,7 @@ const [selectedCategoryForSharing, setSelectedCategoryForSharing] = useState(nul
         await fetchFavoriteSpots(user.id);
         await fetchPrivacySetting(user.id);
         await fetchCategories(user.id);
+        await fetchProfileImage(user.id);
       } else {
         setLoading(false);
       }
@@ -798,6 +805,34 @@ await fetchCategorySpotImages(userId, categoriesData || []);
       console.error('公開設定の取得に失敗:', error);
     }
   };
+  const fetchProfileImage = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('profile_image_url')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (data?.profile_image_url) {
+      // 画像URLが有効かチェック
+      const img = new Image();
+      img.onload = () => {
+        setProfileImage(data.profile_image_url);
+      };
+      img.onerror = () => {
+        console.log('Invalid image URL, clearing from DB');
+        // 無効な画像URLをDBから削除
+        supabase
+          .from('profiles')
+          .update({ profile_image_url: null })
+          .eq('user_id', userId);
+      };
+      img.src = data.profile_image_url;
+    }
+  } catch (error) {
+    console.error('プロフィール画像取得エラー:', error);
+  }
+};
 
   const fetchFavoriteSpots = async (userId) => {
     try {
@@ -881,12 +916,115 @@ await fetchCategorySpotImages(userId, categoriesData || []);
     }
   };
 
+const handleImageSelect = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // ファイルサイズチェック（5MB以下）
+  if (file.size > 5 * 1024 * 1024) {
+    alert('ファイルサイズは5MB以下にしてください');
+    return;
+  }
+
+  // ファイル形式チェック
+  if (!file.type.startsWith('image/')) {
+    alert('画像ファイルを選択してください');
+    return;
+  }
+  
+  setSelectedFile(file);
+  
+  // プレビュー画像を作成
+  const previewUrl = URL.createObjectURL(file);
+  setPreviewImage(previewUrl);
+  setShowConfirmDialog(true);
+};
+
+const confirmImageChange = async () => {
+  if (!selectedFile || !user) return;
+  
+  setUploadingImage(true);
+  try {
+    // 1. 新しい画像をアップロード
+    const fileExt = selectedFile.name.split('.').pop();
+    const fileName = `${user.id}-profile-${Date.now()}.${fileExt}`;
+    
+    const { data, error } = await supabase.storage
+      .from('profile-images-public')
+      .upload(fileName, selectedFile, {
+        cacheControl: '3600',
+        upsert: true
+      });
+      
+    if (error) throw error;
+    
+    // 2. 新しい画像のパブリックURLを取得
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile-images-public')
+      .getPublicUrl(fileName);
+      
+    // 3. DBに新しいURLを保存
+try {
+  console.log('DB保存開始:', { user_id: user.id, profile_image_url: publicUrl });
+  
+  const { data, error: profileError } = await supabase
+  .from('profiles')
+  .upsert({
+    user_id: user.id,
+    username: user.email?.split('@')[0] || 'user', // username追加
+    profile_image_url: publicUrl
+  })
+  .select();
+    
+  console.log('DB保存レスポンス:', { data, error: profileError });
+    
+  if (profileError) {
+    console.error('DB保存エラー詳細:', JSON.stringify(profileError, null, 2));
+    alert(`DB保存失敗: ${profileError.message || 'Unknown error'}`);
+  } else {
+    console.log('DB保存成功:', data);
+    alert('プロフィール画像を更新しました');
+  }
+} catch (dbError) {
+  console.error('DB保存例外:', dbError);
+  alert('DB保存でエラーが発生しました');
+}
+
+// 4. 画像を表示
+setProfileImage(publicUrl);
+setShowConfirmDialog(false);
+setPreviewImage(null);
+setSelectedFile(null);
+    
+  } catch (error) {
+    console.error('画像アップロードエラー:', error);
+    alert(`画像のアップロードに失敗しました: ${error.message || 'Unknown error'}`);
+  } finally {
+    setUploadingImage(false);
+  }
+};
+
+const cancelImageChange = () => {
+  setShowConfirmDialog(false);
+  setPreviewImage(null);
+  setSelectedFile(null);
+  
+  // プレビューURLを解放
+  if (previewImage) {
+    URL.revokeObjectURL(previewImage);
+  }
+};
+
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setFavorites(new Set());
-    setFavoriteSpots([]);
-  };
+  if (!confirm('本当にログアウトしますか？')) {
+    return;
+  }
+  
+  await supabase.auth.signOut();
+  setUser(null);
+  setFavorites(new Set());
+  setFavoriteSpots([]);
+};
 
   const getPrivacyIcon = () => {
     switch (privacySetting) {
@@ -1037,32 +1175,35 @@ const getFilteredSpots = async (categoryId) => {
             </div>
             
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <UserCircle size={18} />
-                <span>{user.email?.split('@')[0]}</span>
-              </div>
-              <button
-                onClick={() => setShowPrivacyModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-              >
-                {getPrivacyIcon()}
-                {getPrivacyLabel()}
-              </button>
-              
-                <a href="/admin"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                <Plus size={18} />
-                スポット登録
-              </a>
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-              >
-                <LogOut size={18} />
-                ログアウト
-              </button>
-            </div>
+  <a href="/follow" className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+    <User size={18} />
+    フォロー一覧
+  </a>
+  
+  <a href="/admin" className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+    <Plus size={18} />
+    スポット登録
+  </a>
+
+  <button 
+    onClick={() => setShowAccountModal(true)}
+    className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors" 
+    title="アカウント設定"
+  >
+    <div className="w-8 h-8 bg-gradient-to-br from-purple-400 to-blue-500 rounded-full flex items-center justify-center overflow-hidden">
+      {profileImage ? (
+        <img 
+          src={profileImage} 
+          alt="プロフィール画像" 
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <UserCircle size={16} className="text-white" />
+      )}
+    </div>
+    <span className="text-sm font-medium">{user.email?.split('@')[0]}</span>
+  </button>
+</div>
           </div>
         </div>
       </header>
@@ -1089,11 +1230,11 @@ const getFilteredSpots = async (categoryId) => {
             <h3 className="text-xl font-bold text-gray-900">マイマップ</h3>
             <button 
   onClick={() => setShowCategoryModal(true)}
-  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+  className="w-10 h-10 bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 rounded-full flex items-center justify-center transition-colors"
+  title="新規マイマップ作成"
 >
-              <Plus size={16} />
-              新規作成
-            </button>
+  <Plus size={20} />
+</button>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -1278,6 +1419,121 @@ const getFilteredSpots = async (categoryId) => {
        setPrivacySetting={setPrivacySetting}
        />
 
+{/* アカウント設定モーダル */}
+{showAccountModal && (
+  <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setShowAccountModal(false)}>
+    <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+      <h2 className="text-xl font-bold text-gray-900 mb-4">アカウント設定</h2>
+      
+      <div className="space-y-4">
+        {/* プロフィール画像 */}
+        <div className="text-center">
+          <div 
+            onClick={() => document.getElementById('profile-image-input')?.click()}
+            className="w-20 h-20 bg-gradient-to-br from-purple-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-2 overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+          >
+            {profileImage ? (
+              <img 
+                src={profileImage} 
+                alt="プロフィール画像" 
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <UserCircle size={32} className="text-white" />
+            )}
+          </div>
+          <button 
+            onClick={() => document.getElementById('profile-image-input')?.click()}
+            className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer bg-transparent border-none"
+            disabled={uploadingImage}
+          >
+            {uploadingImage ? 'アップロード中...' : '画像を変更'}
+          </button>
+          <input
+  id="profile-image-input"
+  type="file"
+  accept="image/*"
+  onChange={handleImageSelect}
+  className="hidden"
+  disabled={uploadingImage}
+/>
+        </div>
+
+        {/* 表示名 */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            表示名
+          </label>
+          <input
+            type="text"
+            defaultValue={user.email?.split('@')[0]}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        {/* ログアウトボタン */}
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+        >
+          <LogOut size={16} />
+          ログアウト
+        </button>
+      </div>
+
+      <div className="flex gap-3 mt-6">
+        <button 
+          onClick={() => setShowAccountModal(false)}
+          className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+        >
+          キャンセル
+        </button>
+        <button 
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          保存
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* 確認ダイアログ */}
+{showConfirmDialog && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[110]">
+    <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+      <h3 className="text-lg font-semibold mb-4">画像を変更しますか？</h3>
+      
+      {/* プレビュー画像 */}
+      {previewImage && (
+        <div className="mb-4 flex justify-center">
+          <img 
+            src={previewImage} 
+            alt="プレビュー" 
+            className="w-32 h-32 rounded-full object-cover"
+          />
+        </div>
+      )}
+      
+      <div className="flex space-x-3">
+        <button
+          onClick={cancelImageChange}
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+          disabled={uploadingImage}
+        >
+          キャンセル
+        </button>
+        <button
+          onClick={confirmImageChange}
+          disabled={uploadingImage}
+          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+        >
+          {uploadingImage ? 'アップロード中...' : 'はい'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       {/* カテゴリ作成モーダル */}
       <CategoryCreateModal
   isOpen={showCategoryModal}

@@ -239,6 +239,7 @@ export default function HomePage() {
   const [favorites, setFavorites] = useState(new Set());
   const [follows, setFollows] = useState(new Set());
   const [authors, setAuthors] = useState(new Map<string, any>());
+  const [profileImage, setProfileImage] = useState(null); 
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -263,31 +264,49 @@ useEffect(() => {
   const [showSpotModal, setShowSpotModal] = useState(false);
   
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUser(user);
-      
-      if (user) {
-        const { data: favData } = await supabase
-          .from('user_favorites')
-          .select('spot_id')
-          .eq('user_id', user.id);
-        
-        if (favData) {
-          setFavorites(new Set(favData.map(fav => fav.spot_id)));
-        }
+    const fetchProfileImage = async (userId) => {
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('profile_image_url')
+      .eq('user_id', userId)
+      .maybeSingle();
 
-        const { data: followData } = await supabase
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', user.id);
-        
-        if (followData) {
-          setFollows(new Set(followData.map(follow => follow.following_id)));
-        }
-      }
-    };
+    if (data?.profile_image_url) {
+      setProfileImage(data.profile_image_url);
+    }
+  } catch (error) {
+    console.error('プロフィール画像取得エラー:', error);
+  }
+};
     
+    const checkAuth = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  setUser(user);
+  
+  if (user) {
+    const { data: favData } = await supabase
+      .from('user_favorites')
+      .select('spot_id')
+      .eq('user_id', user.id);
+    
+    if (favData) {
+      setFavorites(new Set(favData.map(fav => fav.spot_id)));
+    }
+
+    const { data: followData } = await supabase
+      .from('follows')
+      .select('following_id')
+      .eq('follower_id', user.id);
+    
+    if (followData) {
+      setFollows(new Set(followData.map(follow => follow.following_id)));
+    }
+    
+    // プロフィール画像取得を追加
+    await fetchProfileImage(user.id);
+  }
+};
     checkAuth();
   }, []);
 
@@ -683,50 +702,31 @@ const mapInstance = new google.maps.Map(mapRef.current, {
             </div>
             
             {/* ナビゲーション */}
-            <div className="hidden md:flex items-center gap-3">
-              {user ? (
-                <>
-                  <div className="flex items-center gap-2 text-sm text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                    <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
-                      <UserCircle size={12} className="text-white" />
-                    </div>
-                    <span className="font-medium">{user.email?.split('@')[0]}</span>
-                  </div>
-                  <a href="/mymap"
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-pink-500 text-white rounded-lg hover:from-red-600 hover:to-pink-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                  >
-                    <Heart size={16} />
-                    マイマップ
-                  </a>
-                  <a href="/follow"
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                  >
-                    <User size={16} />
-                    フォロー一覧
-                  </a>
-                  <a href="/admin"
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                  >
-                    <Plus size={16} />
-                    スポット登録
-                  </a>
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                  >
-                    <LogOut size={16} />
-                    ログアウト
-                  </button>
-                </>
-              ) : (
-                <a href="/auth"
-                  className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                >
-                  <LogIn size={16} />
-                  ログイン
-                </a>
-              )}
-            </div>
+<div className="hidden md:flex items-center gap-3">
+  {user ? (
+    <a href="/mymap" className="flex items-center gap-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 rounded-lg transition-colors">
+  <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center overflow-hidden">
+    {profileImage ? (
+      <img 
+        src={profileImage} 
+        alt="プロフィール画像" 
+        className="w-full h-full object-cover"
+      />
+    ) : (
+      <UserCircle size={12} className="text-white" />
+    )}
+  </div>
+  <span className="text-sm font-medium">{user.email?.split('@')[0]}</span>
+</a>
+  ) : (
+    <a href="/auth"
+      className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
+    >
+      <LogIn size={16} />
+      ログイン
+    </a>
+  )}
+</div>
 
             {/* モバイルハンバーガーボタン */}
             <div className="md:hidden">
