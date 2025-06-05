@@ -1100,7 +1100,7 @@ const getFilteredSpots = async (categoryId) => {
             {/* すべてのスポット */}
             <div 
   className="relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200"
-  onClick={() => router.push('/mymap/category/all')}
+  onClick={() => router.push('/mymap/category/favorites')}
 >
               <div className="aspect-square bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center group">
   <div className="relative w-full h-full p-2">

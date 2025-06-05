@@ -132,22 +132,35 @@ export default function CategorySpotsPage() {
   }, [categoryId]);
 
   const fetchCategoryAndSpots = async (userId, categoryId) => {
-    try {
-      setLoading(true);
-      
-      // カテゴリ情報取得
-      const { data: categoryData, error: categoryError } = await supabase
-        .from('map_categories')
-        .select('*')
-        .eq('id', categoryId)
-        .eq('user_id', userId)
-        .single();
+  try {
+    setLoading(true);
+    
+    // 'favorites'の場合は特別処理
+if (categoryId === 'favorites') {
+  // 全お気に入りスポット表示
+  setCategory({ 
+    name: 'すべてのスポット', 
+    color: '#6B7280',
+    id: 'favorites'
+  });
+  await fetchAllFavoriteSpots(userId);
+  return;
+}
 
-      if (categoryError) {
-        console.error('カテゴリ取得エラー:', categoryError);
-        setLoading(false);
-        return;
-      }
+    
+    // カテゴリ情報取得
+    const { data: categoryData, error: categoryError } = await supabase
+      .from('map_categories')
+      .select('*')
+      .eq('id', categoryId)
+      .eq('user_id', userId)
+      .single();
+
+    if (categoryError) {
+      console.error('カテゴリ取得エラー:', categoryError);
+      setLoading(false);
+      return;
+    }
 
       setCategory(categoryData);
 
@@ -229,7 +242,66 @@ export default function CategorySpotsPage() {
       setLoading(false);
     }
   };
+const fetchAllFavoriteSpots = async (userId) => {
+  try {
+    // 全お気に入りスポットID取得
+    const { data: favData, error: favError } = await supabase
+      .from('user_favorites')
+      .select('spot_id')
+      .eq('user_id', userId);
 
+    if (favError) throw favError;
+
+    if (favData && favData.length > 0) {
+      const spotIds = favData.map(fav => fav.spot_id);
+
+      // スポット詳細取得
+      const { data: spotsData, error: spotsError } = await supabase
+        .from('spots')
+        .select('*')
+        .in('id', spotIds);
+
+      if (spotsError) throw spotsError;
+
+      setCategorySpots(spotsData || []);
+      setFavorites(new Set(spotIds));
+
+      // 著者情報取得
+      const authorIds = spotsData
+        ?.filter(spot => spot.author_id)
+        .map(spot => spot.author_id) || [];
+      
+      if (authorIds.length > 0) {
+        const { data: authorsData } = await supabase
+          .from('profiles')
+          .select('id, username, display_name, instagram_username, type')
+          .in('id', authorIds);
+        
+        if (authorsData) {
+          const authorsMap = new Map();
+          authorsData.forEach(author => {
+            authorsMap.set(author.id, author);
+          });
+          setAuthors(authorsMap);
+        }
+      }
+
+      // フォロー情報取得
+      const { data: followData } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+      
+      if (followData) {
+        setFollows(new Set(followData.map(follow => follow.following_id)));
+      }
+    } else {
+      setCategorySpots([]);
+    }
+  } catch (error) {
+    console.error('お気に入りスポット取得エラー:', error);
+  }
+};
   const toggleFavorite = async (spotId) => {
     if (!user) {
       window.location.href = '/auth';
