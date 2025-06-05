@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Grid, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check, Coffee, Palette, X } from 'lucide-react';
+import { Grid, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, ArrowLeft, Settings, Globe, Lock, Link as LinkIcon, Copy, Check, Coffee, Palette, X, MoreVertical } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -325,8 +325,197 @@ const CategoryCreateModal = ({ isOpen, onClose, user, onCategoryCreated, favorit
     </div>
   );
 };
+// マイマップ共有設定モーダル
+const MapSharingModal = ({ isOpen, onClose, category, user, onUpdate }) => {
+  const [sharingLevel, setSharingLevel] = useState(category?.sharing_mode || 'private');
+  const [permission, setPermission] = useState(category?.permission_level || 'view');
+  const [shareUrl, setShareUrl] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && category) {
+      setSharingLevel(category.sharing_mode || 'private');
+      setPermission(category.permission_level || 'view');
+      
+      if (category.share_token) {
+        const baseUrl = window.location.origin;
+        setShareUrl(`${baseUrl}/mymap/shared/${category.share_token}`);
+      }
+    }
+  }, [isOpen, category]);
+
+  const handleSave = async () => {
+    if (!user || !category) return;
+
+    setSaving(true);
+    try {
+      let shareToken = category.share_token;
+      
+      if (!shareToken && sharingLevel !== 'private') {
+        shareToken = crypto.randomUUID();
+      }
+
+      const { error } = await supabase
+        .from('map_categories')
+        .update({ 
+          sharing_mode: sharingLevel,
+          permission_level: permission,
+          share_token: shareToken
+        })
+        .eq('id', category.id);
+
+      if (!error) {
+        onUpdate();
+        onClose();
+      } else {
+        alert(`保存に失敗しました: ${error.message}`);
+      }
+    } catch (error) {
+      alert(`予期しないエラー: ${error.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+  try {
+    await navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  } catch (error) {
+    console.error('クリップボードのコピーに失敗:', error);
+  }
+};
+
+const handleDelete = async () => {
+  if (!user || !category) return;
+  
+  if (!confirm(`「${category.name}」を削除してもよろしいですか？この操作は取り消せません。`)) {
+    return;
+  }
+
+  setSaving(true);
+  try {
+    // 1. spot_categoriesの関連データを削除
+    const { error: spotCategoriesError } = await supabase
+      .from('spot_categories')
+      .delete()
+      .eq('category_id', category.id);
+
+    if (spotCategoriesError) throw spotCategoriesError;
+
+    // 2. カテゴリ自体を削除
+    const { error: categoryError } = await supabase
+      .from('map_categories')
+      .delete()
+      .eq('id', category.id);
+
+    if (!categoryError) {
+      onUpdate();
+      onClose();
+      alert('マイマップを削除しました');
+    } else {
+      alert(`削除に失敗しました: ${categoryError.message}`);
+    }
+  } catch (error) {
+    alert(`予期しないエラー: ${error.message}`);
+  } finally {
+    setSaving(false);
+  }
+};
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 flex items-center justify-center z-[100] p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="p-6">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">「{category?.name}」の共有・編集権限設定</h2>
+          
+          <div className="space-y-6">
+            {/* 共有設定 */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                共有設定
+              </label>
+              <select 
+  value={sharingLevel}
+  onChange={(e) => setSharingLevel(e.target.value)}
+  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+>
+  <option value="private">プライベート</option>
+  <option value="link">リンクを知っている全員</option>
+  <option value="public">インターネット上の全員</option>
+</select>
+              <p className="text-xs text-gray-500 mt-1">
+                {sharingLevel === 'private' && '自分だけがアクセスできます'}
+                {sharingLevel === 'link' && 'リンクを持っている人がアクセスできます'}
+                {sharingLevel === 'public' && '誰でもアクセスできます（検索結果にも表示）'}
+              </p>
+            </div>
+
+            {/* 編集権限設定（共有時のみ表示） */}
+            {sharingLevel !== 'private' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  編集権限
+                </label>
+                <select 
+  value={permission}
+  onChange={(e) => setPermission(e.target.value)}
+  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+>
+  <option value="view">閲覧者</option>
+  <option value="comment">コメント可能</option>
+  <option value="edit">編集者</option>
+</select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {permission === 'view' && '表示のみ可能です'}
+                  {permission === 'comment' && '表示とコメントが可能です'}
+                  {permission === 'edit' && 'スポットの追加・削除・編集が可能です'}
+                </p>
+              </div>
+            )}
+
+            {sharingLevel !== 'private' && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h3 className="font-medium text-gray-900 mb-2">共有URL</h3>
+                <div className="flex gap-2">
+                  <input type="text" value={shareUrl} readOnly className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white" />
+                  <button onClick={copyToClipboard} className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    {copied ? <Check size={16} /> : <Copy size={16} />}
+                    {copied ? 'コピー済み' : 'コピー'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 mb-4">
+  <button onClick={onClose} className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors">キャンセル</button>
+  <button onClick={handleSave} disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">{saving ? '保存中...' : '保存'}</button>
+</div>
+
+{/* 削除ボタン */}
+<div className="border-t pt-4">
+  <button 
+    onClick={handleDelete}
+    disabled={saving}
+    className="w-full px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+  >
+    このマイマップを削除
+  </button>
+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // 公開設定モーダルコンポーネント
 const PrivacySettingsModal = ({ isOpen, onClose, user, privacySetting, setPrivacySetting }) => {
+
   const [localPrivacy, setLocalPrivacy] = useState(privacySetting);
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
@@ -486,8 +675,11 @@ export default function MyMapPage() {
   const [categorySpotCounts, setCategorySpotCounts] = useState(new Map());
   const [categorySpotImages, setCategorySpotImages] = useState(new Map());
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-const router = useRouter();
+const [showCategoryModal, setShowCategoryModal] = useState(false);
+const [openMenuId, setOpenMenuId] = useState(null);
+const [showSharingModal, setShowSharingModal] = useState(false);
+const [selectedCategoryForSharing, setSelectedCategoryForSharing] = useState(null);
+  const router = useRouter();
 
   const handleAddToCategory = async (spotId, categoryId) => {
     if (!categoryId) return;
@@ -941,18 +1133,22 @@ const getFilteredSpots = async (categoryId) => {
             {/* カテゴリカード */}
             {categories.map((category) => (
               <div 
-                key={category.id}
-                className={`relative cursor-pointer rounded-2xl overflow-hidden transition-all duration-200 ${
-                  selectedCategory === category.id ? 'ring-2 ring-blue-500' : ''
-                }`}
-                onClick={() => {
-  router.push(`/mymap/category/${category.id}`);
-}}
-              >
+  key={category.id}
+  className={`relative cursor-pointer rounded-2xl transition-all duration-200 ${
+    selectedCategory === category.id ? 'ring-2 ring-blue-500' : ''
+  }`}
+  onClick={(e) => {
+    // 3点メニューまたはその子要素がクリックされた場合は遷移しない
+    if (e.target.closest('.menu-button') || e.target.closest('.dropdown-menu')) {
+      return;
+    }
+    router.push(`/mymap/category/${category.id}`);
+  }}
+>
                 <div 
-                  className="aspect-square flex items-center justify-center"
-                  style={{ backgroundColor: category.color + '20' }}
-                >
+  className="aspect-square flex items-center justify-center overflow-hidden rounded-t-2xl"
+  style={{ backgroundColor: category.color + '20' }}
+>
                   <div className="w-full h-full p-2">
   {(() => {
     const categoryImages = categorySpotImages.get(category.id) || [];
@@ -986,16 +1182,31 @@ const getFilteredSpots = async (categoryId) => {
     <h4 className="font-medium text-gray-900">{category.name}</h4>
     <p className="text-sm text-gray-500">{categorySpotCounts.get(category.id) || 0}件</p>
   </div>
-  <button
+  <div className="flex items-center gap-1">
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        window.location.href = `/?category=${category.id}`;
+      }}
+      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+      title="地図で見る"
+    >
+      <MapIcon size={18} />
+    </button>
+    <div className="relative">
+      <button
   onClick={(e) => {
-    e.stopPropagation(); // カード全体のクリックを防ぐ
-    window.location.href = `/?category=${category.id}`;
+    e.stopPropagation();
+    setSelectedCategoryForSharing(category);
+    setShowSharingModal(true);
   }}
-  className="ml-2 p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-  title="地図で見る"
+  className="menu-button p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+  title="設定"
 >
-  <MapIcon size={18} />
+  <MoreVertical size={18} />
 </button>
+    </div>
+  </div>
 </div>
               </div>
             ))}
@@ -1078,9 +1289,17 @@ const getFilteredSpots = async (categoryId) => {
       fetchCategories(user.id);
     }
   }}
+/><MapSharingModal
+  isOpen={showSharingModal}
+  onClose={() => setShowSharingModal(false)}
+  category={selectedCategoryForSharing}
+  user={user}
+  onUpdate={() => {
+    if (user) {
+      fetchCategories(user.id);
+    }
+  }}
 />
-
-     {/* フッター */}
      <footer className="bg-gray-800 text-white p-4 text-center">
        <p>&copy; 2024 SpottMap - あなただけの特別なマップ</p>
      </footer>
