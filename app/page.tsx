@@ -241,7 +241,13 @@ export default function HomePage() {
   const [authors, setAuthors] = useState(new Map<string, any>());
   const [profileImage, setProfileImage] = useState(null); 
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [searchResults, setSearchResults] = useState({
+  existing: [],
+  newCandidates: [],
+  showManualInput: false
+});
+const [isSearching, setIsSearching] = useState(false);
+const [isLoading, setIsLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [error, setError] = useState(null);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -311,17 +317,11 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredSpots(spots);
-    } else {
-      const filtered = spots.filter((spot: any) => 
-        spot.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        spot.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        spot.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (spot.tags && spot.tags.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
-      setFilteredSpots(filtered);
-    }
+    const timeoutId = setTimeout(() => {
+      performSmartSearch(searchTerm);
+    }, 500); // 500ms遅延でAPI呼び出しを制限
+
+    return () => clearTimeout(timeoutId);
   }, [searchTerm, spots]);
 
   const handleLogout = async () => {
@@ -537,6 +537,109 @@ const mapInstance = new google.maps.Map(mapRef.current, {
     setMap(mapInstance);
   } catch (error) {
     console.error('Google Maps読み込みエラー:', error);
+  }
+};
+
+// Google Places API検索関数
+const searchPlacesAPI = async (query) => {
+  try {
+    const response = await fetch('/api/places/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: query,
+        location: '35.6762,139.6503',
+        radius: 5000
+      }),
+    });
+    
+    const data = await response.json();
+    return data.results || [];
+  } catch (error) {
+    console.error('Places API検索エラー:', error);
+    return [];
+  }
+};
+
+// スマート検索関数
+const performSmartSearch = async (searchQuery) => {
+  if (!searchQuery.trim()) {
+    setFilteredSpots(spots);
+    setSearchResults({ existing: [], newCandidates: [], showManualInput: false });
+    return;
+  }
+
+  setIsSearching(true);
+  
+  // 1. 既存データベース検索
+  const existingSpots = spots.filter((spot) => 
+    spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    spot.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    spot.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (spot.tags && spot.tags.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+  
+  let newCandidates = [];
+  
+  // 2. 既存スポットが少ない場合、Places APIで補完
+  if (existingSpots.length < 3) {
+    newCandidates = await searchPlacesAPI(searchQuery);
+  }
+  
+  const results = {
+    existing: existingSpots,
+    newCandidates: newCandidates.slice(0, 5),
+    showManualInput: existingSpots.length === 0 && newCandidates.length === 0
+  };
+  
+  setSearchResults(results);
+  setFilteredSpots(existingSpots);
+  setIsSearching(false);
+};
+
+// 新規スポット作成関数
+const handleAddNewSpot = async (candidate) => {
+  if (!user) {
+    alert('スポット追加にはログインが必要です');
+    window.location.href = '/auth';
+    return;
+  }
+
+  try {
+    // Supabaseにスポット追加
+    const { data, error } = await supabase
+      .from('spots')
+      .insert({
+        name: candidate.name,
+        location: candidate.location,
+        lat: candidate.lat,
+        lng: candidate.lng,
+        image_url: candidate.image_url,
+        description: `${candidate.name}は${candidate.location}にあるスポットです。`,
+        tags: 'Google Places,新着',
+        author_id: user.id
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // 新しいスポットを配列に追加
+    setSpots(prev => [...prev, data]);
+    setFilteredSpots(prev => [...prev, data]);
+    
+    // 検索結果から削除
+    setSearchResults(prev => ({
+      ...prev,
+      newCandidates: prev.newCandidates.filter((_, index) => 
+        candidate.name !== prev.newCandidates[index].name
+      )
+    }));
+
+    alert(`${candidate.name}を追加しました！`);
+  } catch (error) {
+    console.error('スポット追加エラー:', error);
+    alert('スポットの追加に失敗しました');
   }
 };
        
@@ -822,16 +925,71 @@ const mapInstance = new google.maps.Map(mapRef.current, {
             </div>
             
             {/* 検索結果表示 */}
-            {searchTerm && (
-              <div className="mt-4 text-sm text-gray-600">
-                <span className="font-medium">{filteredSpots.length}件</span>のスポットが見つかりました
-                {searchTerm && (
-                  <span className="ml-2">
-                    「<span className="font-medium text-blue-600">{searchTerm}</span>」の検索結果
-                  </span>
-                )}
+{searchTerm && (
+  <div className="mt-4">
+    <div className="text-sm text-gray-600 mb-4">
+      <span className="font-medium">{filteredSpots.length}件</span>のスポットが見つかりました
+      {searchTerm && (
+        <span className="ml-2">
+          「<span className="font-medium text-blue-600">{searchTerm}</span>」の検索結果
+        </span>
+      )}
+      {isSearching && (
+        <span className="ml-2 text-blue-600">検索中...</span>
+      )}
+    </div>
+    
+    {/* 新規候補表示 */}
+    {searchResults.newCandidates.length > 0 && (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+        <h4 className="font-medium text-blue-900 mb-3">📍 新しいスポットが見つかりました</h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {searchResults.newCandidates.map((candidate, index) => (
+            <div 
+              key={index}
+              className="bg-white p-3 rounded-lg border hover:shadow-md transition-all cursor-pointer"
+              onClick={() => handleAddNewSpot(candidate)}
+            >
+              <div className="flex items-start gap-3">
+                <img 
+                  src={candidate.image_url}
+                  alt={candidate.name}
+                  className="w-12 h-12 rounded-lg object-cover"
+                />
+                <div className="flex-1 min-w-0">
+                  <h5 className="font-medium text-gray-900 truncate">{candidate.name}</h5>
+                  <p className="text-sm text-gray-600 truncate">{candidate.location}</p>
+                  {candidate.rating && (
+                    <p className="text-xs text-yellow-600">⭐ {candidate.rating}</p>
+                  )}
+                </div>
+                <button className="text-blue-600 text-sm font-medium hover:text-blue-700">
+                  追加
+                </button>
               </div>
-            )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+    
+    {/* 手動入力オプション */}
+    {searchResults.showManualInput && (
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+        <h4 className="font-medium text-gray-900 mb-2">✏️ 見つからない場合</h4>
+        <p className="text-sm text-gray-600 mb-3">
+          お探しのスポットが見つかりませんでした。手動で追加しますか？
+        </p>
+        <button 
+  onClick={() => window.location.href = '/admin'}
+  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+>
+  手動でスポット追加
+</button>
+      </div>
+    )}
+  </div>
+)}
           </div>
         </div>
 
