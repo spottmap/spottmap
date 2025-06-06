@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import { MapPin, ArrowLeft, Plus } from 'lucide-react';
@@ -489,3 +489,14 @@ const createManualSpot = () => {
     </div>
   );
 }
+
+// 新しく追加：Suspenseでラップした関数
+function SharePageWithSuspense() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SharePage />
+    </Suspense>
+  );
+}
+
+export default SharePageWithSuspense;
