@@ -30,8 +30,8 @@ declare global {
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 // Instagram埋め込みコンポーネント
@@ -112,7 +112,7 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
 };
 
 // スポット詳細モーダルコンポーネント
-const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorite }: any) => {
+const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorite, handleAddNewSpot }: any) => {
 
   if (!isOpen || !spot) return null;
 
@@ -131,37 +131,12 @@ const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorit
           <div className="flex items-center gap-3">
             <div className="text-lg font-bold text-blue-600">SpottMap</div>
           </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={() => toggleFavorite(spot.id)}
-              className="p-2 text-gray-600 hover:text-red-500 transition-colors"
-            >
-              <Heart 
-                size={20} 
-                className={favorites.has(spot.id) ? "fill-red-500 text-red-500" : ""} 
-              />
-            </button>
-            <button 
-              onClick={() => {
-                if (navigator.share) {
-                  navigator.share({
-                    title: spot.name,
-                    text: spot.description,
-                    url: window.location.href
-                  });
-                }
-              }}
-              className="p-2 text-gray-600 hover:text-blue-500 transition-colors"
-            >
-              <Share2 size={20} />
-            </button>
-            <button 
-              onClick={onClose}
-              className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
+          <button 
+            onClick={onClose}
+            className="p-2 text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* 画像 */}
@@ -175,16 +150,61 @@ const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorit
 
         {/* スポット情報 */}
         <div className="p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {spot.name}
-          </h1>
-          
-          {spot.location && (
-            <div className="flex items-center gap-2 text-gray-600 mb-4">
-              <MapPin size={16} />
-              <span>{spot.location}</span>
+        <div className="flex items-start justify-between mb-4">
+            <div className="flex-1 min-w-0 pr-4">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                {spot.name}
+              </h1>
+              
+              {spot.location && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <MapPin size={16} />
+                  <span>{spot.location}</span>
+                </div>
+              )}
             </div>
-          )}
+            
+            {/* アクションボタン群 - スポット名の右側 */}
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              
+                <button 
+  onClick={async () => {
+    if (!spot.id) {
+      // 新規スポット追加 → マイマップ追加
+      await handleAddNewSpot(spot);
+      return;
+    }
+    toggleFavorite(spot.id);
+  }}
+  className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-sm whitespace-nowrap ${
+    spot.id && favorites.has(spot.id) 
+      ? 'bg-red-100 text-red-600 hover:bg-red-200' 
+      : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+  }`}
+>
+  <Heart size={14} className={spot.id && favorites.has(spot.id) ? "fill-red-600" : ""} />
+  <span className="font-medium">
+    {spot.id && favorites.has(spot.id) ? 'マイマップ済み' : 'マイマップに追加'}
+  </span>
+</button>              
+              
+              <button 
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({
+                      title: spot.name,
+                      text: spot.description,
+                      url: window.location.href
+                    });
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-all duration-200 text-sm whitespace-nowrap"
+              >
+                <Share2 size={14} />
+                <span className="font-medium">シェア</span>
+              </button>
+            </div>
+          </div>
 
           {spot.description && (
             <p className="text-gray-700 leading-relaxed mb-6">
@@ -332,40 +352,52 @@ useEffect(() => {
   };
 
   const toggleFavorite = async (spotId: string) => {
-    if (!user) {
-      window.location.href = '/auth';
-      return;
-    }
+  if (!user) {
+    window.location.href = '/auth';
+    return;
+  }
 
-    const isFavorited = favorites.has(spotId);
+  console.log('toggleFavorite実行:', { spotId, userId: user.id });
+
+  const isFavorited = favorites.has(spotId);
+  
+  if (isFavorited) {
+    console.log('お気に入りから削除中...');
+    const { error } = await supabase
+      .from('user_favorites')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('spot_id', spotId);
     
-    if (isFavorited) {
-      const { error } = await supabase
-        .from('user_favorites')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('spot_id', spotId);
-      
-      if (!error) {
-        setFavorites(prev => {
-          const newFavorites = new Set(prev);
-          newFavorites.delete(spotId);
-          return newFavorites;
-        });
-      }
+    if (error) {
+      console.error('削除エラー:', error);
+      alert('削除に失敗しました: ' + error.message);
     } else {
-      const { error } = await supabase
-        .from('user_favorites')
-        .insert({
-          user_id: user.id,
-          spot_id: spotId
-        });
-      
-      if (!error) {
-        setFavorites(prev => new Set([...prev, spotId]));
-      }
+      console.log('削除成功');
+      setFavorites(prev => {
+        const newFavorites = new Set(prev);
+        newFavorites.delete(spotId);
+        return newFavorites;
+      });
     }
-  };
+  } else {
+    console.log('お気に入りに追加中...');
+    const { error } = await supabase
+      .from('user_favorites')
+      .insert({
+        user_id: user.id,
+        spot_id: spotId
+      });
+    
+    if (error) {
+      console.error('追加エラー:', error);
+      alert('追加に失敗しました: ' + error.message);
+    } else {
+      console.log('追加成功');
+      setFavorites(prev => new Set([...prev, spotId]));
+    }
+  }
+};
 
   const toggleFollow = async (authorId: string) => {
     if (!user) {
@@ -552,11 +584,136 @@ const searchPlacesAPI = async (query) => {
         radius: 5000
       }),
     });
+
+    
     
     const data = await response.json();
     return data.results || [];
   } catch (error) {
     console.error('Places API検索エラー:', error);
+    return [];
+  }
+};
+
+// 距離計算（GPS座標）
+const calculateDistance = (lat1, lng1, lat2, lng2) => {
+  const R = 6371e3; // 地球の半径（メートル）
+  const φ1 = lat1 * Math.PI/180;
+  const φ2 = lat2 * Math.PI/180;
+  const Δφ = (lat2-lat1) * Math.PI/180;
+  const Δλ = (lng2-lng1) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+          Math.cos(φ1) * Math.cos(φ2) *
+          Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // 距離（メートル）
+};
+
+// 店名類似度計算
+const calculateNameSimilarity = (name1, name2) => {
+  const normalize = (str) => str.toLowerCase().replace(/[\s\-・]/g, '');
+  const n1 = normalize(name1);
+  const n2 = normalize(name2);
+  
+  if (n1 === n2) return 1.0;
+  
+  const longer = n1.length > n2.length ? n1 : n2;
+  const shorter = n1.length > n2.length ? n2 : n1;
+  
+  if (longer.length === 0) return 1.0;
+  
+  const editDistance = levenshteinDistance(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+};
+
+// レーベンシュタイン距離
+const levenshteinDistance = (str1, str2) => {
+  const matrix = [];
+  
+  for (let i = 0; i <= str2.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= str1.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[str2.length][str1.length];
+};
+
+// 重複判定
+const findDuplicates = async (candidate) => {
+  console.log('=== findDuplicates開始 ===');
+  console.log('検索対象:', candidate.name, candidate.lat, candidate.lng);
+  
+  try {
+    const { data: nearbySpots } = await supabase
+      .from('spots')
+      .select('*')
+      .gte('lat', candidate.lat - 0.001)
+      .lte('lat', candidate.lat + 0.001)
+      .gte('lng', candidate.lng - 0.001)
+      .lte('lng', candidate.lng + 0.001);
+    
+    console.log('既存スポット数:', nearbySpots?.length || 0);
+    
+    if (!nearbySpots || nearbySpots.length === 0) return [];
+    
+    const duplicates = [];
+    
+    for (const existingSpot of nearbySpots) {
+      console.log('比較中:', existingSpot.name);
+      
+      const distance = calculateDistance(
+        candidate.lat, candidate.lng,
+        existingSpot.lat, existingSpot.lng
+      );
+      
+      const nameSimilarity = calculateNameSimilarity(candidate.name, existingSpot.name);
+      
+      console.log(`- 距離: ${Math.round(distance)}m`);
+      console.log(`- 類似度: ${Math.round(nameSimilarity * 100)}%`);
+      
+      const isDuplicate = (
+        (distance < 10 && nameSimilarity > 0.7) || 
+        (distance < 50 && nameSimilarity > 0.8) || 
+        (distance < 100 && nameSimilarity > 0.95)
+      );
+      
+      console.log(`- 重複判定: ${isDuplicate}`);
+      
+      if (isDuplicate) {
+        duplicates.push({
+          ...existingSpot,
+          distance: Math.round(distance),
+          similarity: Math.round(nameSimilarity * 100)
+        });
+      }
+    }
+    
+    console.log('重複検出数:', duplicates.length);
+    console.log('=== findDuplicates終了 ===');
+    
+    return duplicates.sort((a, b) => a.distance - b.distance);
+    
+  } catch (error) {
+    console.error('重複チェックエラー:', error);
     return [];
   }
 };
@@ -581,9 +738,20 @@ const performSmartSearch = async (searchQuery) => {
   
   let newCandidates = [];
   
-  // 2. 既存スポットが少ない場合、Places APIで補完
+  // 2. 既存スポットが少ない場合、Places APIで補完 + 重複チェック
   if (existingSpots.length < 3) {
-    newCandidates = await searchPlacesAPI(searchQuery);
+    const rawCandidates = await searchPlacesAPI(searchQuery);
+    
+    // 各候補に重複チェック結果を付与
+    for (const candidate of rawCandidates) {
+      const duplicates = await findDuplicates(candidate);
+      candidate.isRegistered = duplicates.length > 0;
+      if (candidate.isRegistered) {
+        candidate.existingSpot = duplicates[0];
+      }
+    }
+    
+    newCandidates = rawCandidates;
   }
   
   const results = {
@@ -591,6 +759,7 @@ const performSmartSearch = async (searchQuery) => {
     newCandidates: newCandidates.slice(0, 5),
     showManualInput: existingSpots.length === 0 && newCandidates.length === 0
   };
+  
   
   setSearchResults(results);
   setFilteredSpots(existingSpots);
@@ -636,9 +805,24 @@ const handleAddNewSpot = async (candidate) => {
       )
     }));
 
-    alert(`${candidate.name}を追加しました！`);
+   // モーダル内で表示中のスポットを更新
+    setSelectedSpot(data);
+    
+    // 自動的にマイマップに追加
+    const { error: favError } = await supabase
+      .from('user_favorites')
+      .insert({
+        user_id: user.id,
+        spot_id: data.id
+      });
+    
+    if (!favError) {
+      setFavorites(prev => new Set([...prev, data.id]));
+    }
+
   } catch (error) {
     console.error('スポット追加エラー:', error);
+    // エラー時のみアラート表示
     alert('スポットの追加に失敗しました');
   }
 };
@@ -945,31 +1129,31 @@ const handleAddNewSpot = async (candidate) => {
         <h4 className="font-medium text-blue-900 mb-3">📍 新しいスポットが見つかりました</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {searchResults.newCandidates.map((candidate, index) => (
-            <div 
-              key={index}
-              className="bg-white p-3 rounded-lg border hover:shadow-md transition-all cursor-pointer"
-              onClick={() => handleAddNewSpot(candidate)}
-            >
-              <div className="flex items-start gap-3">
-                <img 
-                  src={candidate.image_url}
-                  alt={candidate.name}
-                  className="w-12 h-12 rounded-lg object-cover"
-                />
-                <div className="flex-1 min-w-0">
-                  <h5 className="font-medium text-gray-900 truncate">{candidate.name}</h5>
-                  <p className="text-sm text-gray-600 truncate">{candidate.location}</p>
-                  {candidate.rating && (
-                    <p className="text-xs text-yellow-600">⭐ {candidate.rating}</p>
-                  )}
-                </div>
-                <button className="text-blue-600 text-sm font-medium hover:text-blue-700">
-                  追加
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+  <div 
+    key={index}
+    className="bg-white p-3 rounded-lg border hover:shadow-md transition-all cursor-pointer"
+    onClick={() => {
+      setSelectedSpot(candidate);
+      setShowSpotModal(true);
+    }}
+  >
+    <div className="flex items-start gap-3">
+      <img 
+        src={candidate.image_url}
+        alt={candidate.name}
+        className="w-12 h-12 rounded-lg object-cover"
+      />
+      <div className="flex-1 min-w-0">
+        <h5 className="font-medium text-gray-900 truncate">{candidate.name}</h5>
+        <p className="text-sm text-gray-600 truncate">{candidate.location}</p>
+      </div>
+      {candidate.isRegistered && (
+        <div className="text-yellow-500 text-xs">★</div>
+      )}
+    </div>
+  </div>
+))}
+</div>
       </div>
     )}
     
@@ -1048,6 +1232,7 @@ const handleAddNewSpot = async (candidate) => {
         user={user}
         favorites={favorites}
         toggleFavorite={toggleFavorite}
+        handleAddNewSpot={handleAddNewSpot}
       />
     </div>
   );
