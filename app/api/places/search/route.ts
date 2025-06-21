@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { query, location, radius } = await request.json();
+    const { query, location, radius, pageToken = null } = await request.json();
     
-    // Google Places API (New) - Text Search
+    // Google Places API (New) - Text Search (Single Page)
     const placesUrl = `https://places.googleapis.com/v1/places:searchText`;
     
     const requestBody = {
@@ -18,16 +18,23 @@ export async function POST(request: NextRequest) {
           radius: radius || 5000
         }
       },
-      maxResultCount: 10,
+      pageSize: 20, // 1ページあたり20件
       languageCode: 'ja'
     };
 
+    // ページトークンがある場合は追加
+    if (pageToken) {
+      requestBody.pageToken = pageToken;
+    }
+
+    console.log(`Places API リクエスト - pageToken: ${pageToken ? 'あり' : 'なし'}`);
+    
     const response = await fetch(placesUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY!,
-        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.rating,places.photos,places.businessStatus,places.types'
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location,places.rating,places.photos,places.businessStatus,places.types,nextPageToken'
       },
       body: JSON.stringify(requestBody)
     });
@@ -37,10 +44,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await response.json();
-
-    // デバッグ用：生データ確認
-    console.log('=== Google Places生データ ===');
-    console.log(JSON.stringify(data.places?.[0], null, 2));
+    
+    // デバッグ用ログ
+    console.log('Google Places APIから返された件数:', data.places?.length || 0);
+    console.log('nextPageToken:', data.nextPageToken ? 'あり' : 'なし');
 
     // カテゴリ変換関数
     const translateCategory = (types) => {
@@ -107,7 +114,7 @@ export async function POST(request: NextRequest) {
     };
 
     // SpottMapのデータ形式に変換
-    const formattedResults = data.places?.map((place: any) => ({
+    const formattedResults = (data.places || []).map((place: any) => ({
       name: place.displayName?.text || '',
       location: place.formattedAddress || '',
       lat: place.location?.latitude || 0,
@@ -120,11 +127,15 @@ export async function POST(request: NextRequest) {
         'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=300&fit=crop',
       businessStatus: place.businessStatus,
       needsCreation: true
-    })) || [];
+    }));
+
+    console.log('返却件数:', formattedResults.length);
 
     return NextResponse.json({ 
       success: true, 
-      results: formattedResults 
+      results: formattedResults,
+      nextPageToken: data.nextPageToken || null,
+      hasMore: !!data.nextPageToken
     });
 
   } catch (error) {
@@ -139,6 +150,6 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   return NextResponse.json({ 
     message: 'Places API - POST method required',
-    usage: 'Send POST request with { query, location, radius }'
+    usage: 'Send POST request with { query, location, radius, pageToken }'
   });
 }

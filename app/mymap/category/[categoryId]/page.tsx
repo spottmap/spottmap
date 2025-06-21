@@ -2,12 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, MapIcon, Heart, Share2, User, LogIn, LogOut, Plus, UserCircle, Coffee, Eye } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import supabase from '../../../lib/supabase';
 
 // Instagram埋め込みコンポーネント
 const InstagramEmbed = ({ url, fallbackImage, spotName }) => {
@@ -242,58 +237,84 @@ if (categoryId === 'favorites') {
       setLoading(false);
     }
   };
+
 const fetchAllFavoriteSpots = async (userId) => {
   try {
+    console.log('fetchAllFavoriteSpots開始:', userId);
+    
     // 全お気に入りスポットID取得
     const { data: favData, error: favError } = await supabase
       .from('user_favorites')
       .select('spot_id')
       .eq('user_id', userId);
 
+    console.log('user_favorites結果:', { favData, favError });
+
     if (favError) throw favError;
 
     if (favData && favData.length > 0) {
-      const spotIds = favData.map(fav => fav.spot_id);
+      // spot_idの厳密なバリデーション
+      const validSpotIds = favData
+        .map(fav => fav.spot_id)
+        .filter(id => {
+          if (!id || id === 'null' || id === null || typeof id !== 'string') {
+            return false;
+          }
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          return uuidRegex.test(id);
+        });
 
-      // スポット詳細取得
-      const { data: spotsData, error: spotsError } = await supabase
-        .from('spots')
-        .select('*')
-        .in('id', spotIds);
+      console.log('フィルタ前spot_ids:', favData.map(fav => fav.spot_id));
+      console.log('フィルタ後spot_ids:', validSpotIds);
 
-      if (spotsError) throw spotsError;
+      if (validSpotIds.length > 0) {
+        // スポット詳細取得
+        const { data: spotsData, error: spotsError } = await supabase
+          .from('spots')
+          .select('*')
+          .in('id', validSpotIds);
 
-      setCategorySpots(spotsData || []);
-      setFavorites(new Set(spotIds));
-
-      // 著者情報取得
-      const authorIds = spotsData
-        ?.filter(spot => spot.author_id)
-        .map(spot => spot.author_id) || [];
-      
-      if (authorIds.length > 0) {
-        const { data: authorsData } = await supabase
-          .from('profiles')
-          .select('id, username, display_name, instagram_username, type')
-          .in('id', authorIds);
-        
-        if (authorsData) {
-          const authorsMap = new Map();
-          authorsData.forEach(author => {
-            authorsMap.set(author.id, author);
-          });
-          setAuthors(authorsMap);
+        if (spotsError) {
+          console.error('spots取得エラー:', spotsError);
+          throw spotsError;
         }
-      }
 
-      // フォロー情報取得
-      const { data: followData } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', userId);
-      
-      if (followData) {
-        setFollows(new Set(followData.map(follow => follow.following_id)));
+        setCategorySpots(spotsData || []);
+        setFavorites(new Set(validSpotIds));
+
+        // 著者情報取得
+        const authorIds = spotsData
+          ?.filter(spot => spot.author_id)
+          .map(spot => spot.author_id) || [];
+        
+        if (authorIds.length > 0) {
+          const { data: authorsData } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, instagram_username, type')
+            .in('id', authorIds);
+          
+          if (authorsData) {
+            const authorsMap = new Map();
+            authorsData.forEach(author => {
+              authorsMap.set(author.id, author);
+            });
+            setAuthors(authorsMap);
+          }
+        }
+
+        // フォロー情報取得
+        const { data: followData } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', userId);
+        
+        if (followData) {
+          setFollows(new Set(followData.map(follow => follow.following_id)));
+        }
+      } else {
+        console.log('有効なspotIdなし');
+        setCategorySpots([]);
+        setFavorites(new Set());
       }
     } else {
       setCategorySpots([]);
@@ -302,6 +323,8 @@ const fetchAllFavoriteSpots = async (userId) => {
     console.error('お気に入りスポット取得エラー:', error);
   }
 };
+
+
   const toggleFavorite = async (spotId) => {
     if (!user) {
       window.location.href = '/auth';

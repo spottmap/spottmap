@@ -1,15 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { MapPin, Plus, Save, AlertCircle } from 'lucide-react';
+import BottomNavigation from '../components/BottomNavigation';
 
 // 静的生成を無効化（環境変数が必要なため）
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import supabase from '../lib/supabase';
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
@@ -185,7 +182,7 @@ export default function AdminPage() {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <main className="max-w-7xl mx-auto pb-20">
         <div className="bg-white rounded-lg shadow-md">
           <div className="p-6 border-b border-gray-200">
             <h2 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -365,17 +362,20 @@ export default function AdminPage() {
 
             {/* メッセージ表示 */}
             {message && (
-              <div className={`p-4 rounded-lg ${
-                message.includes('エラー') 
-                  ? 'bg-red-50 text-red-800 border border-red-200' 
-                  : 'bg-green-50 text-green-800 border border-green-200'
-              }`}>
-                {message}
-              </div>
-            )}
+  <div className={`p-4 rounded-lg ${
+    message.includes('エラー') 
+      ? 'bg-red-50 text-red-800 border border-red-200' 
+      : 'bg-green-50 text-green-800 border border-green-200'
+  }`}>
+    {message}
+  </div>
+)}
           </form>
         </div>
       </main>
+
+      {/* 下部ナビゲーション */}
+      <BottomNavigation user={user} />
     </div>
   );
 }

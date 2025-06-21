@@ -1,13 +1,13 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { ArrowLeft, UserCircle, MapPin, Heart, UserMinus } from 'lucide-react';
+import BottomNavigation from '../components/BottomNavigation';
 import Link from 'next/link';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+// 静的生成を無効化（環境変数が必要なため）
+export const dynamic = 'force-dynamic';
+
+import supabase from '../lib/supabase';
 
 export default function FollowsPage() {
   const [user, setUser] = useState(null);
@@ -152,7 +152,7 @@ export default function FollowsPage() {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-20">
         {/* 統計情報 */}
         <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-6 rounded-lg mb-8">
           <div className="flex items-center justify-between">
@@ -244,6 +244,9 @@ export default function FollowsPage() {
           </div>
         )}
       </main>
+
+      {/* 下部ナビゲーション */}
+      <BottomNavigation user={user} />
     </div>
   );
 }

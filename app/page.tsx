@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { Loader } from '@googlemaps/js-api-loader';
+import BottomNavigation from './components/BottomNavigation';
 
 import { 
   Grid, 
@@ -29,10 +29,7 @@ declare global {
   }
 }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import supabase from './lib/supabase';
 
 // Instagram埋め込みコンポーネント
 const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) => {
@@ -111,9 +108,41 @@ const InstagramEmbed = ({ url, onLoad }: { url: string; onLoad?: () => void }) =
   );
 };
 
+// ローディング付き画像コンポーネント
+const ImageWithLoading = ({ src, alt, className }: { src: string; alt: string; className: string }) => {
+  const [isLoading, setIsLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <div className="relative">
+      {isLoading && !hasError && (
+        <div className="absolute inset-0 bg-gray-200 flex items-center justify-center rounded-lg">
+          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+        </div>
+      )}
+      {hasError ? (
+        <div className="w-full h-full bg-gray-200 flex items-center justify-center rounded-lg">
+          <span className="text-gray-500 text-sm">画像を読み込めません</span>
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          onLoad={() => setIsLoading(false)}
+          onError={() => {
+            setIsLoading(false);
+            setHasError(true);
+          }}
+          style={{ display: isLoading ? 'none' : 'block' }}
+        />
+      )}
+    </div>
+  );
+};
+
 // スポット詳細モーダルコンポーネント
 const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorite, handleAddNewSpot }: any) => {
-
   if (!isOpen || !spot) return null;
 
   return (
@@ -141,7 +170,7 @@ const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorit
 
         {/* 画像 */}
         <div className="aspect-square bg-gray-100">
-          <img 
+          <ImageWithLoading 
             src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=600&h=600&fit=crop'}
             alt={spot.name}
             className="w-full h-full object-cover"
@@ -169,13 +198,17 @@ const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorit
               
                 <button 
   onClick={async () => {
-    if (!spot.id) {
-      // 新規スポット追加 → マイマップ追加
-      await handleAddNewSpot(spot);
-      return;
-    }
+  if (!spot.id) {
+    // 新規スポット追加 → マイマップ追加
+    await handleAddNewSpot(spot);
+    return;
+  }
+  if (spot.id && spot.id !== 'null') {
     toggleFavorite(spot.id);
-  }}
+  } else {
+    console.error('無効なspotId:', spot.id);
+  }
+}}
   className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-sm whitespace-nowrap ${
     spot.id && favorites.has(spot.id) 
       ? 'bg-red-100 text-red-600 hover:bg-red-200' 
@@ -251,9 +284,9 @@ const SpotDetailModal = ({ spot, isOpen, onClose, user, favorites, toggleFavorit
 };
 
 export default function HomePage() {
-  const [viewMode, setViewMode] = useState('grid');
   const [spots, setSpots] = useState([]);
   const [filteredSpots, setFilteredSpots] = useState([]);
+  const [visibleCandidatesCount, setVisibleCandidatesCount] = useState(10);
   const [map, setMap] = useState(null);
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState(new Set());
@@ -279,11 +312,6 @@ useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const categoryParam = urlParams.get('category');
     setCategoryId(categoryParam);
-    
-    // カテゴリパラメータがある場合は地図表示に切り替え
-    if (categoryParam) {
-      setViewMode('map');
-    }
   }
 }, []);
   const [selectedSpot, setSelectedSpot] = useState(null);
@@ -310,27 +338,39 @@ useEffect(() => {
   const { data: { user } } = await supabase.auth.getUser();
   setUser(user);
   
-  if (user) {
-    const { data: favData } = await supabase
-      .from('user_favorites')
-      .select('spot_id')
-      .eq('user_id', user.id);
+  if (user && user.id && user.id !== 'null' && user.id !== null) {
+    console.log('認証済みユーザー:', user.id);
     
-    if (favData) {
-      setFavorites(new Set(favData.map(fav => fav.spot_id)));
-    }
+    try {
+      const { data: favData, error: favError } = await supabase
+        .from('user_favorites')
+        .select('spot_id')
+        .eq('user_id', user.id);
+      
+      if (favError) {
+        console.error('お気に入り取得エラー:', favError);
+      } else if (favData) {
+        setFavorites(new Set(favData.map(fav => fav.spot_id)));
+      }
 
-    const { data: followData } = await supabase
-      .from('follows')
-      .select('following_id')
-      .eq('follower_id', user.id);
-    
-    if (followData) {
-      setFollows(new Set(followData.map(follow => follow.following_id)));
+      const { data: followData, error: followError } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', user.id);
+      
+      if (followError) {
+        console.error('フォロー取得エラー:', followError);
+      } else if (followData) {
+        setFollows(new Set(followData.map(follow => follow.following_id)));
+      }
+      
+      // プロフィール画像取得を追加
+      await fetchProfileImage(user.id);
+    } catch (error) {
+      console.error('認証データ取得エラー:', error);
     }
-    
-    // プロフィール画像取得を追加
-    await fetchProfileImage(user.id);
+  } else {
+    console.log('未認証またはユーザーIDが無効');
   }
 };
     checkAuth();
@@ -344,6 +384,40 @@ useEffect(() => {
     return () => clearTimeout(timeoutId);
   }, [searchTerm, spots]);
 
+  // 無限スクロール用useEffect
+useEffect(() => {
+  const handleScroll = () => {
+    const loadMoreIndicator = document.getElementById('load-more-indicator');
+    
+    if (!loadMoreIndicator) {
+      console.log('load-more-indicator が見つからない');
+      return;
+    }
+    
+    const indicatorRect = loadMoreIndicator.getBoundingClientRect();
+    console.log('スクロール検出:', {
+      indicatorTop: indicatorRect.top,
+      windowHeight: window.innerHeight,
+      visibleCount: visibleCandidatesCount,
+      totalCount: searchResults.newCandidates.length
+    });
+    
+    // インジケーターが画面に入ったら次の10件を読み込み
+    if (indicatorRect.top <= window.innerHeight - 100 && visibleCandidatesCount < searchResults.newCandidates.length) {
+      console.log('次の10件を読み込み:', visibleCandidatesCount, '->', Math.min(visibleCandidatesCount + 10, searchResults.newCandidates.length));
+      setVisibleCandidatesCount(prev => Math.min(prev + 10, searchResults.newCandidates.length));
+    }
+  };
+
+  window.addEventListener('scroll', handleScroll);
+  return () => window.removeEventListener('scroll', handleScroll);
+}, [visibleCandidatesCount, searchResults.newCandidates.length]);
+
+  // 検索が変わったら表示件数をリセット
+  useEffect(() => {
+    setVisibleCandidatesCount(10);
+  }, [searchTerm]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -354,6 +428,13 @@ useEffect(() => {
   const toggleFavorite = async (spotId: string) => {
   if (!user) {
     window.location.href = '/auth';
+    return;
+  }
+
+  // spotIdの有効性チェック
+  if (!spotId || spotId === 'null' || spotId === 'undefined') {
+    console.error('無効なspotId:', spotId);
+    alert('スポットIDが無効です');
     return;
   }
 
@@ -440,12 +521,27 @@ useEffect(() => {
 }, [categoryId]);
 
 useEffect(() => {
-  if (viewMode === 'map' && spots.length > 0) {
+  console.log('useEffect実行:', { 
+    spotsLength: spots.length, 
+    mapRefExists: !!mapRef.current 
+  });
+  
+  if (spots.length > 0 && mapRef.current) {
+    console.log('initMap呼び出し開始');
     setTimeout(() => initMap(), 100);
+  } else if (spots.length > 0) {
+    console.log('mapRef.currentが存在しない、500ms後に再試行');
+    setTimeout(() => {
+      if (mapRef.current) {
+        console.log('再試行でinitMap呼び出し');
+        initMap();
+      }
+    }, 500);
   }
-}, [viewMode, spots]);
+}, [spots]);
 
   const fetchSpots = async () => {
+  console.log('fetchSpots開始');
   setIsLoading(true);
   setError(null);
   
@@ -482,8 +578,10 @@ if (categoryId && categoryId !== 'all') {
   const { data, error } = await query;
     
     if (data) {
-      setSpots(data);
-      setFilteredSpots(data);
+    console.log('取得したスポット数:', data.length);
+    console.log('スポットデータ:', data);
+    setSpots(data);
+    setFilteredSpots(data);
       
       const authorIds = data
         .filter(spot => spot.author_id)
@@ -515,10 +613,18 @@ if (categoryId && categoryId !== 'all') {
   const initMap = async () => {
   console.log('initMap called with spots:', spots);
   console.log('spots length:', spots.length);
+  console.log('API Key存在:', !!process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+  console.log('mapRef存在:', !!mapRef.current);
   
-  // DOM要素の存在確認
+  // DOM要素の存在確認（より厳密に）
   if (!mapRef.current) {
     console.error('Map element not found');
+    // 少し待ってから再試行
+    setTimeout(() => {
+      if (mapRef.current && spots.length > 0) {
+        initMap();
+      }
+    }, 500);
     return;
   }
 
@@ -527,44 +633,68 @@ if (categoryId && categoryId !== 'all') {
     version: 'weekly',
   });
 
-  try {
+try {
+    console.log('Google Maps読み込み開始...');
     const google = await loader.load();
-    // スポットの中心座標を計算
-let center = { lat: 35.6762, lng: 139.6503 }; // デフォルト
-if (spots.length > 0) {
-  const latSum = spots.reduce((sum, spot) => sum + spot.lat, 0);
-  const lngSum = spots.reduce((sum, spot) => sum + spot.lng, 0);
-  center = {
-    lat: latSum / spots.length,
-    lng: lngSum / spots.length
-  };
-}
+    console.log('Google Maps読み込み成功');
 
-const mapInstance = new google.maps.Map(mapRef.current, {
-  center: center, // 計算された中心座標
+    // スポットの中心座標を計算
+    let center = { lat: 35.6762, lng: 139.6503 }; // デフォルト
+    if (spots.length > 0) {
+      const latSum = spots.reduce((sum, spot) => sum + spot.lat, 0);
+      const lngSum = spots.reduce((sum, spot) => sum + spot.lng, 0);
+      center = {
+        lat: latSum / spots.length,
+        lng: lngSum / spots.length
+      };
+    }
+
+    const mapInstance = new google.maps.Map(mapRef.current, {
+  center: center,
   zoom: 12,
-      styles: [
-        {
-          featureType: "poi",
-          elementType: "labels",
-          stylers: [{ visibility: "off" }]
-        }
-      ]
-    });
+  // 航空写真切り替えを無効化
+  mapTypeControl: false,
+  // その他のコントロールも整理
+  streetViewControl: false,
+  fullscreenControl: false,
+  // モダンなスタイル
+  styles: [
+    {
+      featureType: "poi",
+      elementType: "labels",
+      stylers: [{ visibility: "off" }]
+    },
+    {
+      featureType: "road",
+      elementType: "geometry",
+      stylers: [{ color: "#f5f5f5" }]
+    },
+    {
+      featureType: "water",
+      elementType: "geometry",
+      stylers: [{ color: "#c9c9c9" }]
+    },
+    {
+      featureType: "landscape",
+      elementType: "geometry",
+      stylers: [{ color: "#f9f9f9" }]
+    }
+  ]
+});
 
     spots.forEach((spot: any) => {
-  const marker = new google.maps.Marker({
-    position: { lat: spot.lat, lng: spot.lng },
-    map: mapInstance,
-    title: spot.name,
-  });
-  
-  // マーカークリックでモーダル表示
-  marker.addListener('click', () => {
-    setSelectedSpot(spot);
-    setShowSpotModal(true);
-  });
-});
+      const marker = new google.maps.Marker({
+        position: { lat: spot.lat, lng: spot.lng },
+        map: mapInstance,
+        title: spot.name,
+      });
+      
+      // マーカークリックでモーダル表示
+      marker.addListener('click', () => {
+        setSelectedSpot(spot);
+        setShowSpotModal(true);
+      });
+    });
 
     setMap(mapInstance);
   } catch (error) {
@@ -572,7 +702,7 @@ const mapInstance = new google.maps.Map(mapRef.current, {
   }
 };
 
-// Google Places API検索関数
+// Places API呼び出し関数（20件まで）
 const searchPlacesAPI = async (query) => {
   try {
     const response = await fetch('/api/places/search', {
@@ -581,18 +711,67 @@ const searchPlacesAPI = async (query) => {
       body: JSON.stringify({
         query: query,
         location: '35.6762,139.6503',
-        radius: 5000
+        radius: 50000
       }),
     });
 
-    
-    
     const data = await response.json();
+    console.log('Places API結果数:', data.results?.length || 0);
     return data.results || [];
   } catch (error) {
     console.error('Places API検索エラー:', error);
     return [];
   }
+};
+
+// スマート検索関数（20件対応）
+const performSmartSearch = async (searchQuery) => {
+  if (!searchQuery.trim()) {
+    setFilteredSpots(spots);
+    setSearchResults({ existing: [], newCandidates: [], showManualInput: false });
+    return;
+  }
+
+  setIsSearching(true);
+  
+  // 1. 既存データベース検索
+  const existingSpots = spots.filter((spot) => 
+    spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    spot.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    spot.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (spot.tags && spot.tags.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+  
+  let newCandidates = [];
+  
+  // 2. 既存スポットが少ない場合、Places APIで補完
+  if (existingSpots.length < 3) {
+    console.log('Places API検索開始');
+    const rawCandidates = await searchPlacesAPI(searchQuery);
+    
+    // 重複チェック
+    for (const candidate of rawCandidates) {
+      const duplicates = await findDuplicates(candidate);
+      candidate.isRegistered = duplicates.length > 0;
+      if (candidate.isRegistered) {
+        candidate.existingSpot = duplicates[0];
+      }
+    }
+    
+    newCandidates = rawCandidates;
+    console.log('Places API検索完了:', newCandidates.length, '件');
+  }
+  
+  // 最終結果設定
+  const results = {
+    existing: existingSpots,
+    newCandidates: newCandidates,
+    showManualInput: existingSpots.length === 0 && newCandidates.length === 0
+  };
+  
+  setSearchResults(results);
+  setFilteredSpots(existingSpots);
+  setIsSearching(false);
 };
 
 // 距離計算（GPS座標）
@@ -718,53 +897,102 @@ const findDuplicates = async (candidate) => {
   }
 };
 
-// スマート検索関数
-const performSmartSearch = async (searchQuery) => {
-  if (!searchQuery.trim()) {
-    setFilteredSpots(spots);
-    setSearchResults({ existing: [], newCandidates: [], showManualInput: false });
-    return;
-  }
-
-  setIsSearching(true);
+// タグ生成アルゴリズム
+const generateOptimizedTags = (candidate) => {
+  const tags = [];
   
-  // 1. 既存データベース検索
-  const existingSpots = spots.filter((spot) => 
-    spot.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    spot.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    spot.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (spot.tags && spot.tags.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // 1. 店名から業種抽出
+  const name = candidate.name.toLowerCase();
+  const businessTypes = {
+    'ラーメン': ['ラーメン', 'ramen', '麺'],
+    'カフェ': ['カフェ', 'cafe', 'coffee', 'コーヒー'],
+    '美容': ['美容', 'beauty', 'salon', 'ネイル', 'nail'],
+    'レストラン': ['restaurant', 'dining'],
+    '銀行': ['銀行', 'bank'],
+    '博物館': ['博物館', 'museum'],
+    '電子機器': ['apple', 'electronic', 'pc', 'phone']
+  };
   
-  let newCandidates = [];
+  Object.entries(businessTypes).forEach(([category, keywords]) => {
+    if (keywords.some(keyword => name.includes(keyword))) {
+      tags.push(category);
+    }
+  });
   
-  // 2. 既存スポットが少ない場合、Places APIで補完 + 重複チェック
-  if (existingSpots.length < 3) {
-    const rawCandidates = await searchPlacesAPI(searchQuery);
+  // 2. 住所から地域抽出（正規表現パース）
+  const location = candidate.location;
+  const parseLocation = (address) => {
+    const locationTags = [];
     
-    // 各候補に重複チェック結果を付与
-    for (const candidate of rawCandidates) {
-      const duplicates = await findDuplicates(candidate);
-      candidate.isRegistered = duplicates.length > 0;
-      if (candidate.isRegistered) {
-        candidate.existingSpot = duplicates[0];
+    // 都道府県抽出
+    const prefectureMatch = address.match(/(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都?|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府?|大阪府?|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)/);
+    if (prefectureMatch) {
+      locationTags.push(prefectureMatch[1]);
+      // 短縮形も追加（東京都→東京、大阪府→大阪）
+      const shortName = prefectureMatch[1].replace(/(都|府|県)$/, '');
+      if (shortName !== prefectureMatch[1]) {
+        locationTags.push(shortName);
       }
     }
     
-    newCandidates = rawCandidates;
-  }
-  
-  const results = {
-    existing: existingSpots,
-    newCandidates: newCandidates.slice(0, 5),
-    showManualInput: existingSpots.length === 0 && newCandidates.length === 0
+    // 市区町村抽出
+    const cityMatch = address.match(/([^\s　]+?[市区町村])/);
+    if (cityMatch) {
+      locationTags.push(cityMatch[1]);
+      // 市区町村を除いた名前も追加（四日市市→四日市）
+      const cityBase = cityMatch[1].replace(/[市区町村]$/, '');
+      if (cityBase !== cityMatch[1]) {
+        locationTags.push(cityBase);
+      }
+    }
+    
+    // 海外住所（カンマ・スペース区切りパーツをそのまま追加）
+    if (!prefectureMatch) {
+      const parts = address.split(/[,，\s　]+/).filter(part => part.length > 1);
+      parts.forEach(part => {
+        const cleanPart = part.trim()
+          .replace(/^[0-9\-]+/, '') // 先頭の番地削除
+          .replace(/[0-9]+$/, '');  // 末尾の番号削除
+        if (cleanPart.length > 1) {
+          locationTags.push(cleanPart);
+        }
+      });
+    }
+    
+    return locationTags;
   };
   
+  const locationTags = parseLocation(location);
+  tags.push(...locationTags);
   
-  setSearchResults(results);
-  setFilteredSpots(existingSpots);
-  setIsSearching(false);
+  // 3. Places APIタイプをフィルタリング
+  const excludeTypes = ['establishment', 'point_of_interest', 'store', 'food', 
+                       'meal_takeaway', 'tourist_attraction'];
+  const usefulTypes = (candidate.types || []).filter(type => !excludeTypes.includes(type));
+  tags.push(...usefulTypes);
+  
+  // 4. 重複除去（日本語優先）
+  const duplicateMap = {
+    'bank': '銀行',
+    'restaurant': 'レストラン', 
+    'cafe': 'カフェ',
+    'beauty_salon': '美容',
+    'museum': '博物館',
+    'electronics_store': '電子機器'
+  };
+  
+  const finalTags = tags.filter(tag => {
+    if (duplicateMap[tag]) {
+      return !tags.includes(duplicateMap[tag]);
+    }
+    return true;
+  });
+  
+  // 5. 重複削除
+  return [...new Set(finalTags)].join(',');
 };
+
+
 
 // 新規スポット作成関数
 const handleAddNewSpot = async (candidate) => {
@@ -785,7 +1013,7 @@ const handleAddNewSpot = async (candidate) => {
         lng: candidate.lng,
         image_url: candidate.image_url,
         description: `${candidate.name}は${candidate.location}にあるスポットです。`,
-        tags: 'Google Places,新着',
+        tags: generateOptimizedTags(candidate),
         author_id: user.id
       })
       .select()
@@ -822,11 +1050,10 @@ const handleAddNewSpot = async (candidate) => {
 
   } catch (error) {
     console.error('スポット追加エラー:', error);
-    // エラー時のみアラート表示
-    alert('スポットの追加に失敗しました');
+    console.error('エラー詳細:', JSON.stringify(error, null, 2));
+    alert('スポットの追加に失敗しました: ' + (error.message || 'Unknown error'));
   }
 };
-       
 
   // 空状態コンポーネント
   const EmptyState = () => (
@@ -876,12 +1103,11 @@ const handleAddNewSpot = async (candidate) => {
                   {spot.instagram_url ? (
                     <InstagramEmbed url={spot.instagram_url} />
                   ) : (
-                    <img 
-                      src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=600&fit=crop'}
-                      alt={spot.name}
-                      className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-500"
-                      style={{ aspectRatio: 'auto' }}
-                    />
+                    <ImageWithLoading 
+  src={spot.image_url || 'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&h=600&fit=crop'}
+  alt={spot.name}
+  className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-500"
+/>
                   )}
                   
                   {/* Pinterest風オーバーレイ */}
@@ -891,7 +1117,11 @@ const handleAddNewSpot = async (candidate) => {
                       <button
   onClick={(e) => {
     e.stopPropagation();
-    toggleFavorite(spot.id);
+    if (spot.id) {
+      toggleFavorite(spot.id);
+    } else {
+      console.error('スポットIDが存在しません:', spot);
+    }
   }}
   className="bg-red-500 hover:bg-red-600 text-white rounded-full p-3 shadow-lg transform hover:scale-110 transition-all duration-200"
 >
@@ -1064,7 +1294,7 @@ const handleAddNewSpot = async (candidate) => {
       </header>
 
       {/* メインコンテンツ */}
-      <main className="max-w-7xl mx-auto">
+      <main className="max-w-7xl mx-auto pb-20">
         {/* 検索・フィルターセクション - ヘッダー直下に移動 */}
         <div className="bg-white border-b border-gray-100 shadow-sm pt-6">
           <div className="px-6 py-6">
@@ -1079,32 +1309,6 @@ const handleAddNewSpot = async (candidate) => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
-              </div>
-              
-              {/* 表示切替のみ */}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
-                    viewMode === 'grid' 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  <Grid size={16} />
-                  カード
-                </button>
-                <button
-                  onClick={() => setViewMode('map')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all duration-200 text-sm font-medium ${
-                    viewMode === 'map' 
-                      ? 'bg-white text-blue-600 shadow-sm' 
-                      : 'text-gray-600 hover:text-gray-800'
-                  }`}
-                >
-                  <MapIcon size={16} />
-                  地図
-                </button>
               </div>
             </div>
             
@@ -1123,39 +1327,48 @@ const handleAddNewSpot = async (candidate) => {
       )}
     </div>
     
-    {/* 新規候補表示 */}
-    {searchResults.newCandidates.length > 0 && (
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-        <h4 className="font-medium text-blue-900 mb-3">📍 新しいスポットが見つかりました</h4>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {searchResults.newCandidates.map((candidate, index) => (
-  <div 
-    key={index}
-    className="bg-white p-3 rounded-lg border hover:shadow-md transition-all cursor-pointer"
-    onClick={() => {
-      setSelectedSpot(candidate);
-      setShowSpotModal(true);
-    }}
-  >
-    <div className="flex items-start gap-3">
-      <img 
-        src={candidate.image_url}
-        alt={candidate.name}
-        className="w-12 h-12 rounded-lg object-cover"
-      />
-      <div className="flex-1 min-w-0">
-        <h5 className="font-medium text-gray-900 truncate">{candidate.name}</h5>
-        <p className="text-sm text-gray-600 truncate">{candidate.location}</p>
-      </div>
-      {candidate.isRegistered && (
-        <div className="text-yellow-500 text-xs">★</div>
-      )}
+   {/* 新規候補表示 */}
+{searchResults.newCandidates.length > 0 && (
+  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+    <h4 className="font-medium text-blue-900 mb-3">📍 候補スポット</h4>
+    <div className="space-y-2" id="candidates-container">
+      {searchResults.newCandidates.slice(0, visibleCandidatesCount).map((candidate, index) => (
+        <div 
+          key={index}
+          className="bg-white p-4 rounded-lg border hover:shadow-md transition-all cursor-pointer flex items-center justify-between"
+          onClick={() => {
+            setSelectedSpot(candidate);
+            setShowSpotModal(true);
+          }}
+        >
+          <div className="flex items-center gap-3 flex-1">
+            <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
+              <span className="text-gray-600 text-sm">🏪</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h5 className="font-medium text-gray-900 truncate">{candidate.name}</h5>
+              <p className="text-sm text-gray-600 truncate">{candidate.location}</p>
+            </div>
+          </div>
+          {candidate.isRegistered && (
+            <div className="text-yellow-500 text-lg">★</div>
+          )}
+        </div>
+      ))}
+      
+      {/* 読み込みインジケーター */}
+{visibleCandidatesCount < searchResults.newCandidates.length && (
+  <div className="flex justify-center pt-4" id="load-more-indicator">
+    <div className="flex items-center gap-2 text-sm text-gray-500">
+      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+      <span>さらに読み込み中...</span>
     </div>
   </div>
-))}
-</div>
-      </div>
-    )}
+)}
+    </div>
+  </div>
+)}
+    
     
     {/* 手動入力オプション */}
     {searchResults.showManualInput && (
@@ -1196,34 +1409,13 @@ const handleAddNewSpot = async (candidate) => {
             <ErrorState />
           ) : filteredSpots.length === 0 ? (
             <EmptyState />
-          ) : viewMode === 'map' ? (
-            <div ref={mapRef} className="w-full h-[50vh] md:h-[60vh] lg:h-[70vh] min-h-[400px] max-h-[85vh] rounded-lg mt-6 shadow-lg"></div>
           ) : (
-            <GridView />
+  <div ref={mapRef} className="w-full h-[60vh] md:h-[70vh] lg:h-[80vh] min-h-[500px] max-h-[90vh] rounded-lg mt-6 shadow-lg"></div>
           )}
         </div>
       </main>
 
-      {/* フッター */}
-      <footer className="bg-gradient-to-r from-gray-800 to-gray-900 text-white">
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <MapPin size={18} className="text-white" />
-              </div>
-              <div>
-                <div className="font-bold text-lg">SpottMap</div>
-                <div className="text-sm text-gray-300">感度の高いローカルスポットを発見</div>
-              </div>
-            </div>
-            <div className="text-sm text-gray-400">
-              &copy; 2024 SpottMap
-            </div>
-          </div>
-        </div>
-      </footer>
-
+     
       {/* スポット詳細モーダル */}
       <SpotDetailModal
         spot={selectedSpot}
@@ -1234,6 +1426,8 @@ const handleAddNewSpot = async (candidate) => {
         toggleFavorite={toggleFavorite}
         handleAddNewSpot={handleAddNewSpot}
       />
+      {/* 下部ナビゲーション */}
+<BottomNavigation user={user} />
     </div>
   );
 }

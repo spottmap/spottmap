@@ -1,14 +1,11 @@
 'use client';
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import BottomNavigation from './components/BottomNavigation';
 
 // 静的生成を無効化（環境変数が必要なため）
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import supabase from './lib/supabase';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -60,7 +57,9 @@ export default function Auth() {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-md">
+  <div className="min-h-screen bg-gray-50">
+    <div className="max-w-md mx-auto pt-16 p-6">
+      <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-2xl font-bold text-center mb-6">
         {isLogin ? 'ログイン' : 'サインアップ'}
       </h2>
@@ -135,6 +134,11 @@ export default function Auth() {
           {isLogin ? 'サインアップ' : 'ログイン'}
         </button>
       </p>
+      </div>
     </div>
-  );
+
+    {/* 下部ナビゲーション */}
+    <BottomNavigation user={null} />
+  </div>
+);
 }
